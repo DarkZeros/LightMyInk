@@ -1,0 +1,30 @@
+# Ignore build output
+/build/
+/managed_components/
+*.bin
+*.elf
+*.csv
+dependencies.lock
+/__pycache__/
+
+# Ignore compiled files
+*.o
+*.a
+*.out
+
+# Ignore generated files
+sdkconfig
+sdkconfig.old
+
+# Ignore logs and temporary files
+*.log
+*.d
+*.tmp
+
+# Ignore system and IDE files
+.DS_Store
+.vscode/
+.idea/
+
+# Ignore backup files
+*~
