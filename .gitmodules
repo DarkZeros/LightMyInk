@@ -1,0 +1,34 @@
+[submodule "esp-idf"]
+	path = esp-idf
+	url = https://github.com/DarkZeros/esp-idf
+	branch = v5.1
+[submodule "arduino"]
+	path = components/arduino
+	url = https://github.com/espressif/arduino-esp32.git
+[submodule "WiFiManager"]
+	path = components/WiFiManager/WiFiManager
+	url = https://github.com/tzapu/WiFiManager
+[submodule "pcf8563"]
+	path = components/pcf8563/pcf8563
+	url = https://github.com/orbitalair/Rtc_Pcf8563.git
+[submodule "GxEPD2"]
+	path = components/GxEPD2/GxEPD2
+	url = https://github.com/DarkZeros/GxEPD2
+[submodule "BusIO"]
+	path = components/GfxLibrary/Adafruit_BusIO
+	url = https://github.com/adafruit/Adafruit_BusIO
+[submodule "GfxLibrary"]
+	path = components/GfxLibrary/Adafruit-GFX-Library
+	url = https://github.com/adafruit/Adafruit-GFX-Library
+[submodule "NTPClient"]
+	path = components/NTPClient/NTPClient
+	url = https://github.com/arduino-libraries/NTPClient
+[submodule "Time"]
+	path = components/Time/Time
+	url = https://github.com/PaulStoffregen/Time
+[submodule "ArduinoJson"]
+	path = components/ArduinoJson
+	url = https://github.com/bblanchon/ArduinoJson
+[submodule "ArduinoNvs"]
+	path = components/ArduinoNvs/ArduinoNvs
+	url = https://github.com/DarkZeros/ArduinoNvs
