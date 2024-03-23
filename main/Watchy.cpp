@@ -15,9 +15,6 @@ RTC_DATA_ATTR long gmtOffset = 0;
 RTC_DATA_ATTR bool alreadyInMenu         = true;
 RTC_DATA_ATTR tmElements_t bootTime;
 
-#include "nvs_flash.h"
-#include "nvs.h"
-
 #include "driver/gpio.h"
 #include "esp_private/esp_clk.h"
 
