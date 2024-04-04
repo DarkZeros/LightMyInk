@@ -18,10 +18,16 @@ set(privrequires
 set(srcs 
     #hello_world_main.c
     main.cpp
-    Watchy_7_SEG.cpp
-    WatchyRTC.cpp
-    Watchy.cpp
-    Display.cpp
+    #Watchy_7_SEG.cpp
+    #WatchyRTC.cpp
+    #Watchy.cpp
+    display.cpp
+    battery.cpp
+    core.cpp
+    power.cpp
+    touch.cpp
+    peripherals.cpp
+    time.cpp
 )
 
 set(CMAKE_CXX_STANDARD 23)

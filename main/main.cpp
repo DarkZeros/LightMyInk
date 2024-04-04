@@ -1,14 +1,10 @@
 
-#include "Watchy_7_SEG.h"
-#include "settings.h"
+#include "core.h"
 
-// #include "watch.h"
-#include "battery.h"
-
-Watchy7SEG watchy(settings);
+Core lightMyInk;
 
 extern "C" {
 void app_main(void) {
-    watchy.init();
+    lightMyInk.boot();
 }
 }

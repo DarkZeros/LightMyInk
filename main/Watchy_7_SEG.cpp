@@ -102,6 +102,8 @@ void Watchy7SEG::drawMoon(float p, uint16_t x, uint16_t y, uint16_t radius, uint
     drawEllipse(x, y, radius * (p - 75) / 25, radius, on);
 }
 
+#include "driver/touch_sensor.h"
+
 void Watchy7SEG::drawWatchFace(){
     display.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
     display.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
@@ -117,6 +119,19 @@ void Watchy7SEG::drawWatchFace(){
     display.print(getBatteryVoltage());
     display.drawCircle(150, 100, 28, GxEPD_BLACK);
     display.fillCircle(150, 100, 25, GxEPD_BLACK);
+
+    switch(esp_sleep_get_touchpad_wakeup_status()) {
+        case 0:
+            display.drawRect(190, 10, 10, 90, GxEPD_BLACK); break;
+        case 2:
+            display.drawRect(0, 10, 10, 90, GxEPD_BLACK); break;
+        case 5:
+            display.drawRect(0, 110, 10, 90, GxEPD_BLACK); break;
+        case 6:
+            display.drawRect(190, 110, 10, 90, GxEPD_BLACK); break;
+        default:
+        ;
+    }
     //display.fillCircleHelper(150, 100, 25, 0b0011, 10, GxEPD_WHITE);
 
     // auto a = esp_timer_get_time();

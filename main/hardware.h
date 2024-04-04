@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cstdint>
+
 namespace HW {
 
 namespace Touch {
-    enum Btn {TopLeft, TopRight, BotLeft, BotRight};
     constexpr uint8_t Pin[] = {2,4,12,14};
+    constexpr uint8_t Num[] = {0,2,5,6};
+    constexpr uint8_t Num2Btn[] = {0, 255, 1, 255, 255, 2, 3};
 }
 
 namespace DisplayPin {
@@ -12,14 +15,14 @@ namespace DisplayPin {
     constexpr uint8_t Res = 9;
     constexpr uint8_t Dc = 10;
     constexpr uint8_t Busy = 19;
-};
+}
 
 constexpr uint8_t kAdcPin = 34;
 constexpr uint8_t kRtcIntPin = 32;
 constexpr uint8_t kLightPin = 25;
-constexpr uint8_t kBuzzPin = 26;
+constexpr uint8_t kSpeakerPin = 26;
 constexpr uint8_t kVibratorPin = 27;
-constexpr uint8_t kSelectPin = 13;
+constexpr uint8_t kVoltageSelectPin = 13;
 
 /*#define UP_BTN_MASK (uint64_t(1)<<GPIO_NUM_35)
 #define MENU_BTN_MASK (uint64_t(1)<<GPIO_NUM_26)

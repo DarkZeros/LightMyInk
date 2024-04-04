@@ -1,5 +1,7 @@
 #include "Watchy.h"
 
+#include "hardware.h"
+
 WatchyRTC Watchy::RTC;
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> Watchy::display(
     WatchyDisplay{});
@@ -20,7 +22,7 @@ RTC_DATA_ATTR tmElements_t bootTime;
 
 // Set V2.9 (1) / 2.6V (0)
 void setVoltage(bool high) {
-  gpio_config_t io_conf = {};
+  /*gpio_config_t io_conf = {};
   //disable interrupt
   io_conf.intr_type = GPIO_INTR_DISABLE;
   //set as output mode
@@ -30,10 +32,14 @@ void setVoltage(bool high) {
   //disable pull-down mode
   io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
   //disable pull-up mode
-  io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+  io_conf.pull_up_en = GPIO_PULLUP_DISABLE;*/
   //configure GPIO with the given settings
-  gpio_config(&io_conf);
-  gpio_set_level((gpio_num_t)13, high);
+  pinMode(13, OUTPUT);
+  gpio_hold_dis((gpio_num_t)13);
+  gpio_deep_sleep_hold_dis();
+  //gpio_config(&io_conf);
+  gpio_set_level((gpio_num_t)13, high ? 1 : 0);
+  ESP_LOGE("volt", "%d", high);
   gpio_hold_en((gpio_num_t)13);
   gpio_deep_sleep_hold_en();
 }
@@ -42,14 +48,16 @@ void setVoltage(bool high) {
 
 void setUpTouch() {
   // Set up touch pad before going back to sleep
-  /*#define THRESHOLD 50
+  #define THRESHOLD 30
   touch_pad_init();
   touch_pad_set_voltage(TOUCH_HVOLT_2V5, TOUCH_LVOLT_0V5, TOUCH_HVOLT_ATTEN_0V); 
+  //touch_pad_set_cnt_mode(); 
   touch_pad_set_measurement_clock_cycles(1024);
   touch_pad_set_measurement_interval(2*4096);
-  // touch_pad_set_trigger_mode(TOUCH_TRIGGER_BELOW);
+  //touch_pad_set_trigger_mode(TOUCH_TRIGGER_BELOW);
   //touch_pad_intr_enable();  // returns ESP_OK
   esp_sleep_enable_touchpad_wakeup();
+  //touch_pad_denoise_disable();
   touch_pad_config((touch_pad_t)0, THRESHOLD);
   touch_pad_config((touch_pad_t)2, THRESHOLD);
   touch_pad_config((touch_pad_t)5, THRESHOLD);
@@ -58,10 +66,16 @@ void setUpTouch() {
   touch_pad_set_fsm_mode(TOUCH_FSM_MODE_TIMER);   // returns ESP_OK
   uint16_t mask = (1 << 0)|(1 << 2)|(1 << 5)|(1 << 6);
   touch_pad_set_group_mask(mask, mask, mask);
-
+  
+  /*touch_pad_filter_start(100);
   while (true) {
     delay(1000);
-    ESP_LOGE("touch", "%d %d %d %d", touchRead(T0), touchRead(T2), touchRead(T5), touchRead(T6));
+    uint16_t t[4];
+    touch_pad_read_raw_data((touch_pad_t)0, &t[0]);
+    touch_pad_read_raw_data((touch_pad_t)2, &t[1]);
+    touch_pad_read_raw_data((touch_pad_t)5, &t[2]);
+    touch_pad_read_raw_data((touch_pad_t)6, &t[3]);
+    ESP_LOGE("touch", "TL%d TR%d BL%d BR%d", t[0], t[1], t[2], t[3]);
   }*/
   //touch_pad_filter_start(10);
 
@@ -128,7 +142,10 @@ void Watchy::init(String datetime) {
   // Wire.begin(SDA, SCL);                         // init i2c
   // RTC.init();
 
+  ESP_LOGE("", "Wakeup %d", (uint8_t)wakeup_reason);
   ESP_LOGE("","start %lld %lu", esp_timer_get_time(), esp_cpu_get_cycle_count());
+  esp_clk_slowclk_cal_set(15997066); // Old chip
+  esp_clk_slowclk_cal_set(15995199); // New chip
 
   // Init the display since is almost sure we will use it
   display.epd2.initWatchy();
@@ -181,31 +198,43 @@ void Watchy::init(String datetime) {
 
     // Calibrate RTC using NVS storage values
     // esp_clk_slowclk_cal_set(cal_val);
-    // ESP_LOGE("", "%lu", esp_clk_slowclk_cal_get());
+    ESP_LOGE("", "%lu", esp_clk_slowclk_cal_get());
 
-    // vibMotor(75, 4);
+    vibMotor(75, 4);
     // For some reason, seems to be enabled on first boot
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     // Select default voltage 2.9V for WiFi
     setVoltage(true);
+    //sleep(3);
     // We need Arduino for this (WiFi + NTP)
     initArduino();
     showSyncNTP();
     // Select default voltage 2.6V
     setVoltage(false);
+    //sleep(3);
     break;
   }
   deepSleep();
 }
+
+#include "menu.h"
+
+
 void Watchy::deepSleep() {
   display.hibernate();
   // RTC.clearAlarm();        // resets the alarm flag in the RTC
+
+// Example configurations
+  NumConfigEntry<uint8_t, 2, 10> asd;
+  ESP_LOGE("", "size%d name%s val%d", sizeof(asd), asd.name(), asd.mData);
+  ESP_LOGE("", "%lu", esp_clk_slowclk_cal_get());
 
   // Set GPIOs 0-39 to input to avoid power leaking out
   const uint64_t ignore = 0b11110001000000110000100111000010; // Ignore some GPIOs due to resets
   for (int i = 0; i < GPIO_NUM_MAX; i++) {
     if ((ignore >> i) & 0b1)
       continue;
+    // ESP_LOGE("", "%d input", i);
     pinMode(i, INPUT);
   }
   // esp_sleep_enable_ext0_wakeup((gpio_num_t)RTC_INT_PIN,
@@ -215,7 +244,7 @@ void Watchy::deepSleep() {
   //     ESP_EXT1_WAKEUP_ANY_HIGH); // enable deep sleep wake on button press
   
   // Set up touch pad before going back to sleep
-  setUpTouch();
+  //setUpTouch();
 
   ESP_LOGE("","sleep %lld", esp_timer_get_time());
 
@@ -499,11 +528,11 @@ void Watchy::showBuzz() {
 }
 
 void Watchy::vibMotor(uint8_t intervalMs, uint8_t length) {
-  pinMode(VIB_MOTOR_PIN, OUTPUT);
+  pinMode(HW::kVibratorPin, OUTPUT);
   bool motorOn = false;
   for (int i = 0; i < length; i++) {
     motorOn = !motorOn;
-    digitalWrite(VIB_MOTOR_PIN, motorOn);
+    digitalWrite(HW::kVibratorPin, motorOn);
     delay(intervalMs);
   }
 }
