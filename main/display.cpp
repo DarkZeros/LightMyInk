@@ -335,7 +335,8 @@ void Display::hibernate()
   {
     _startTransfer();
     _transferCommand(0x10); // deep sleep mode
-    _transfer(0x1);         // enter deep sleep
+    //_transfer(0x1);         // enter deep sleep
+    _transfer(0x11);         // enter deep sleep, no RAM
     _endTransfer();
     _hibernating = true;
   }
@@ -369,6 +370,7 @@ void Display::_PowerOnAsync()
   _startTransfer();
   _transferCommand(0x22);
   _transfer(0xf8);
+  //_transfer(0x38);
   _transferCommand(0x20);
   _endTransfer();
   waitingPowerOn = true;
@@ -498,9 +500,82 @@ void Display::_Update_Part()
   _transferCommand(0x22);
   //_transfer(0xcc); // skip temperature load (-5ms)
   _transfer(0xfc);
+  // _transfer(0xff);
+  //1xxxxxx1 // Enable Disable clock
+  //x1xxxx1x // Enable disable analog
+  //xx1xxxxx // Load temp
+  //xxx1xxxx // Load LUT
+  //xxxx1xxx // Display mode 2
+  //xxxxx1xx // Display! 
   _transferCommand(0x20);
   _endTransfer();
   _waitWhileBusy("_Update_Part", partial_refresh_time);
+}
+
+void Display::_transferLUT()
+{
+  if (true) {
+    return;
+  }
+
+  /*_transferCommand(0x33); // Read LUT
+  unsigned char lut_partial_update_real[] =
+  {
+      0x10, 0x18, 0x18, 0x08, 0x18, 0x18, 0x08, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x14, 0x44, 0x12, 0x00, 
+      0x00, 0x00, 0x00, 
+      0x00, 0x00
+  };
+  SPI.transferBytes(NULL, lut_partial_update_real, 30);
+  for (int i=0; i<30; i++) {
+    ESP_LOGE("LUT", "%02x", lut_partial_update_real[i]);
+  }*/
+  _transferCommand(0x32); // Write LUT
+  /*for (int i=0; i<10; i++) { // Black LUT
+    _transfer(0x00);
+  }
+  for (int i=0; i<10; i++) { // White LUT
+    _transfer(0xFF);
+  }
+  for (int i=0; i<10*3; i++) { // Colour LUT
+    _transfer(0x00);
+  }
+  for (int i=0; i<10; i++) { // Phases length + Repeats
+    _transfer(0x00); // A
+    _transfer(0x00); // B
+    _transfer(0x00); // C
+    _transfer(0x00); // D
+    _transfer(0x00); // RP
+  }*/
+  const unsigned char lut_full_update[] =
+  {
+      0x02, 0x02, 0x01, 0x11, 0x12, 0x12, 0x22, 0x22, 0x66, 0x69,
+      0x69, 0x59, 0x58, 0x99, 0x99, 0x88, 0x00, 0x00, 0x00, 0x00,
+      //0xF8, 0xB4, 0x13, 0x51, 0x35, 0x51, 0x51, 0x19, 0x01, 0x00
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  };
+  const unsigned char lut_partial_update[] =
+  {
+    // 12xVS A-D LUT 0
+
+    // 12xVS A-D LUT 1
+    // 12xVS A-D LUT 2
+    // 12xVS A-D LUT 3
+    // 12xVS A-D LUT 4 ? 
+    // 12x TPA+TPB + SRAB + TPC+TPD + SRCD + RP
+    // 12x FR // Frame Rate
+    // 12x XON // Gate ON
+
+
+
+
+      0x10, 0x18, 0x18, 0x08, 0x18, 0x18, 0x08, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x13, 0x14, 0x44, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  };
+  for (int i=0; i<153; i++)
+    _transfer(lut_full_update[i]);
 }
 
 void Display::_transferCommand(uint8_t value)

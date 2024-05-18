@@ -96,6 +96,7 @@ class Display : public GxEPD2_EPD
     virtual void _reset();
 
     void _transferCommand(uint8_t command);
+    void _transferLUT();
 };
 
 using DisplayBW = GxEPD2_BW<Display, Display::HEIGHT>;
