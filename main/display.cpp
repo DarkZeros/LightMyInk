@@ -22,6 +22,11 @@ bool Display::displayFullInit = true;
 
 void Display::busyCallback(const void *) {
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
+  
+  // Turn OFF the FLASH during this long sleep?
+  esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF);
+  // ESP_LOGE("lisghtSleep", "%ld", micros());
+  
   esp_sleep_enable_gpio_wakeup();
   esp_light_sleep_start();
 }
@@ -365,15 +370,15 @@ void Display::_setPartialRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 
 void Display::_PowerOnAsync()
 {
-  if (_power_is_on)
-    return;
-  _startTransfer();
-  _transferCommand(0x22);
-  _transfer(0xf8);
-  //_transfer(0x38);
-  _transferCommand(0x20);
-  _endTransfer();
-  waitingPowerOn = true;
+  // if (_power_is_on)
+  //   return;
+  // _startTransfer();
+  // _transferCommand(0x22);
+  // _transfer(0xf8);
+  // //_transfer(0x38);
+  // _transferCommand(0x20);
+  // _endTransfer();
+  // waitingPowerOn = true;
   _power_is_on = true;
 }
 
@@ -497,10 +502,23 @@ void Display::_Update_Full()
 void Display::_Update_Part()
 {
   _startTransfer();
+
+  // Write 50ºC fixed temp (fast update)
+  _transferCommand(0x1A);
+  _transfer(0x32);
+  _transfer(0x00);
+
   _transferCommand(0x22);
-  //_transfer(0xcc); // skip temperature load (-5ms)
-  _transfer(0xfc);
+  //_transferLUT();
+
+  _transfer(0b11011100); // part update + LUT + Leave power on
+  //_transfer(0b11011111); // part update + LUT + Leave power off
+
+  // _transfer(0b11111100); // part update + Load Temp + LUT + Leave power on
+  // _transfer(0b11111111); // part update + Load Temp + LUT + Leave power off
+
   // _transfer(0xff);
+  //
   //1xxxxxx1 // Enable Disable clock
   //x1xxxx1x // Enable disable analog
   //xx1xxxxx // Load temp
@@ -514,7 +532,7 @@ void Display::_Update_Part()
 
 void Display::_transferLUT()
 {
-  if (true) {
+  if (false) {
     return;
   }
 
@@ -555,27 +573,47 @@ void Display::_transferLUT()
       //0xF8, 0xB4, 0x13, 0x51, 0x35, 0x51, 0x51, 0x19, 0x01, 0x00
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   };
+  const unsigned char VS00 = 0;
+  const unsigned char VS01 = 0b01010101;
+  const unsigned char VS10 = 0b10101010;
+  const unsigned char VS11 = 0b11111111;
+  #define REPEAT12(x) x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x,
+
   const unsigned char lut_partial_update[] =
   {
     // 12xVS A-D LUT 0
-
+    REPEAT12(VS11)
     // 12xVS A-D LUT 1
+    REPEAT12(VS01)
     // 12xVS A-D LUT 2
+    REPEAT12(VS10)
     // 12xVS A-D LUT 3
-    // 12xVS A-D LUT 4 ? 
+    REPEAT12(VS00)
+    // 12xVS A-D LUT 4 ?
+    REPEAT12(VS00) 
     // 12x TPA+TPB + SRAB + TPC+TPD + SRCD + RP
+    /*1,1, 0, 1,1, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,
+    0,0, 0, 0,0, 0, 0,*/
     // 12x FR // Frame Rate
+    /*0b00010111, 0b01110111, 0b01110111,
+    0b01110111, 0b01110111, 0b01110111,
     // 12x XON // Gate ON
-
-
-
-
-      0x10, 0x18, 0x18, 0x08, 0x18, 0x18, 0x08, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x13, 0x14, 0x44, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    0b00000000, 
+    0b00000000,
+    0b00000000,*/
   };
-  for (int i=0; i<153; i++)
-    _transfer(lut_full_update[i]);
+  for (int i=0; i<sizeof(lut_partial_update); i++)
+    _transfer(lut_partial_update[i]);
 }
 
 void Display::_transferCommand(uint8_t value)

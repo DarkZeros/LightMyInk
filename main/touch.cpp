@@ -25,8 +25,8 @@ void Touch::setUp(bool onlyMenuLight) {
   touch_pad_set_fsm_mode(TOUCH_FSM_MODE_TIMER);   // returns ESP_OK
   
   uint16_t mask =
-    (1 << HW::Touch::Num[mSettings.mMap[Touch::Light]])
-    |(1 << HW::Touch::Num[mSettings.mMap[Touch::Menu]])
+    (1 << HW::Touch::Num[mSettings.mMap[Touch::Menu]])
+    |(!onlyMenuLight << HW::Touch::Num[mSettings.mMap[Touch::Light]])
     |(!onlyMenuLight << HW::Touch::Num[mSettings.mMap[Touch::Down]])
     |(!onlyMenuLight << HW::Touch::Num[mSettings.mMap[Touch::Up]]);
 

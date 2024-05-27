@@ -7,20 +7,30 @@
 
 Battery::Battery(BatterySettings& settings)
 : mSettings{settings}
-, mCurVoltage{readVoltageAveragedScaled()}
+, mCurVoltage{readVoltageScaledAveraged()}
+, mCurPercent{percent()}
 {
 }
 
-uint16_t Battery::readVoltageAveragedScaled() const {
-    // Perform N reads, then save the average in memory
+uint16_t Battery::readVoltageScaledAveraged() const {
+    // Perform N reads and average them
     uint32_t total{};
     for(auto i=0; i<mSettings.mSamples; i++) {
-        total += readVoltage();
+        total += readVoltageScaled();
     }
-    return total / mSettings.mSamples;
+    total /= mSettings.mSamples;
+    // The merge that data with the running average
+    auto& av = mSettings.mVoltage;
+    if (av == 0xFFFF) {
+        // Still no average, use this value as starting point
+        av = total;
+    } else {
+        av += (total - mSettings.mVoltage) / mSettings.mAverages;
+    }
+    return av;
 }
 
-uint16_t Battery::readVoltage() const {
+uint16_t Battery::readVoltageScaled() const {
     // adc_oneshot_unit_handle_t adc_handle;
     // adc_oneshot_unit_init_cfg_t init_config = {
     //     .unit_id = ADC_UNIT_1,
@@ -46,14 +56,13 @@ uint16_t Battery::readVoltage() const {
     return analogReadMilliVolts(HW::kAdcPin) * mSettings.mScale / 64;
 }
 
-float Battery::percent() const {
+uint16_t Battery::percent() const {
     auto it = std::lower_bound(kLipoVolt2Perc.begin(), kLipoVolt2Perc.end(), 
         std::pair<uint8_t, uint16_t>{0, mCurVoltage},
         [](auto& a, auto& b) { return a.second < b.second; }
     );
     // ESP_LOGE("", "%d %d,  %d %d", (it-1)->first, (it-1)->second, it->first, it->second);
     return (
-        (mCurVoltage - (it-1)->second) * 1.f * it->first
-            + (it->second - mCurVoltage) * (it-1)->first)
+        (mCurVoltage - (it-1)->second) * it->first + (it->second - mCurVoltage) * (it-1)->first) * 10
          / (it->second - (it-1)->second);
 }

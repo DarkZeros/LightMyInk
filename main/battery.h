@@ -8,9 +8,13 @@
 
 struct BatterySettings {
     uint8_t mScale{128}; // Adjust the scaler, Divided by 64, default 2x
-    uint8_t mSamples{4};
+    uint8_t mSamples{1};
 
-    // Historic data
+    // Runing average battery indicator
+    uint16_t mVoltage{0xFFFF};
+    uint8_t mAverages{16}; // How much to perform the running average
+
+    // Historic data ? TODO
     time_t mFirstMeasure{0}; // When we started the bat stats
     time_t mLastMeasure{0}; // When we did last measurement
     // The diff of both give us where we store/aggregate
@@ -48,13 +52,13 @@ constexpr std::array<std::pair<uint8_t, uint16_t>, 16> kLipoVolt2Perc = {{
 class Battery {
     BatterySettings& mSettings;
     
-    uint16_t readVoltage() const;
-    uint16_t readVoltageAveragedScaled() const;
+    uint16_t readVoltageScaled() const;
+    uint16_t readVoltageScaledAveraged() const;
+    uint16_t percent() const;
 
 public:
     explicit Battery(BatterySettings& settings);
 
-    const uint16_t mCurVoltage;
-
-    float percent() const;
+    const uint16_t mCurVoltage; // In mV
+    const uint16_t mCurPercent; // In fixed point 0.0% units
 };

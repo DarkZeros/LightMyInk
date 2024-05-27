@@ -147,6 +147,9 @@ MenuItem{"Main Menu", {
 {}
 
 void Core::boot() {
+
+
+    //ESP_LOGE("deepSleep", "boot %ld", millis());
     mDisplay.epd2.initDisplay(); // TODO: Move it to constructor
     
     if (kSettings.mValid) {
@@ -211,7 +214,7 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1714081700, .tv_usec=0};
+    struct timeval tv{.tv_sec=1716064825, .tv_usec=0};
     struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
@@ -394,43 +397,35 @@ void Core::drawTime(int16_t x, int16_t y){
 void Core::drawDate(int16_t x, int16_t y){
     mDisplay.setFont(&Seven_Segment10pt7b);
 
-    int16_t  x1, y1;
-    uint16_t w, h;
-
     mDisplay.setCursor(x, y);
 
-    const char * weekDay = "SSMTWTF";
-    for (int i = 1; i<8; i++) {
-        if (i == mNow.Wday) {
-            mDisplay.setTextColor(GxEPD_WHITE, GxEPD_BLACK);
-            mDisplay.getTextBounds(String(weekDay[i%7]), mDisplay.getCursorX(), mDisplay.getCursorY(), &x1, &y1, &w, &h);
-            mDisplay.fillRect(mDisplay.getCursorX(), mDisplay.getCursorY()-h, w+2, h+2, GxEPD_BLACK);
-        } else {
-            mDisplay.setTextColor(GxEPD_BLACK, GxEPD_WHITE);
-        }
-        mDisplay.print(weekDay[i%7]);
-    }
-
-    // String dayOfWeek = dayStr(mNow.Wday);
-    // mDisplay.getTextBounds(dayOfWeek, x, y, &x1, &y1, &w, &h);
-    // if(mNow.Wday == 4){
-    //     w = w - 5;
+    // const char * weekDay = "SSMTWTF";
+    // for (int i = 1; i<8; i++) {
+    //     if (i == mNow.Wday) {
+    //         mDisplay.setTextColor(GxEPD_WHITE, GxEPD_BLACK);
+    //         mDisplay.getTextBounds(String(weekDay[i%7]), mDisplay.getCursorX(), mDisplay.getCursorY(), &x1, &y1, &w, &h);
+    //         mDisplay.fillRect(mDisplay.getCursorX(), mDisplay.getCursorY()-h, w+2, h+2, GxEPD_BLACK);
+    //     } else {
+    //         mDisplay.setTextColor(GxEPD_BLACK, GxEPD_WHITE);
+    //     }
+    //     mDisplay.print(weekDay[i%7]);
     // }
-    // mDisplay.setCursor(x + 85 - w, y);
-    // mDisplay.println(dayOfWeek);
+
+    String dayOfWeek = dayShortStr(mNow.Wday);
+    mDisplay.setCursor(x, y);
+    mDisplay.println(dayOfWeek);
 
     String month = monthShortStr(mNow.Month);
-    mDisplay.getTextBounds(month, 60, y+25, &x1, &y1, &w, &h);
-    mDisplay.setCursor(x + 85 - w, y+25);
+    mDisplay.setCursor(x + 70, y);
     mDisplay.println(month);
 
-    mDisplay.setFont(&DSEG7_Classic_Bold_25);
-    mDisplay.setCursor(5, 120);
+    mDisplay.setFont(&DSEG7_Classic_Regular_15);
+    mDisplay.setCursor(x + 40, y+1);
     if(mNow.Day < 10){
         mDisplay.print("0");
     }
     mDisplay.println(mNow.Day);
-    mDisplay.setCursor(x, y+65);
+    mDisplay.setCursor(x + 110, y+1);
     mDisplay.println(tmYearToCalendar(mNow.Year));// offset from 1970, since year is stored in uint8_t
 }
 
@@ -439,17 +434,21 @@ void Core::showWatchFace() {
     bool DARKMODE = false;
     mDisplay.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
     mDisplay.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-    drawTime(5, 53+5);
-    drawDate(5, 85);
-    //drawBattery(154, 73+150);
+    drawTime(4, 73);
+    drawDate(17, 97);
+    // drawBattery(100, 73+150);
     // mDisplay.print(mBattery.mCurVoltage);
-    // mDisplay.printf(" /%.2f", mBattery.percent());
+    mDisplay.setCursor(68, 120);
+    mDisplay.setFont(NULL);
+    mDisplay.setTextSize(2);
+    mDisplay.printf("%.1f%%", mBattery.mCurPercent * 0.1f);
 
     // mDisplay.fillScreen(GxEPD_WHITE);
     // mDisplay.setTextColor(GxEPD_BLACK);
     // mDisplay.setTextSize(4);
     // mDisplay.print("ASD");
     mDisplay.display(!mDisplay.epd2.displayFullInit);
+    delay(2);
 }
 void Core::drawBatteryIcon(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
     mDisplay.drawRect(x + 2, y + 0, w - 4, h - 0, color);
@@ -470,7 +469,7 @@ void Core::drawBattery(int16_t x, int16_t y) {
     // mDisplay.setFont(&Seven_Segment10pt7b);
 
     mDisplay.setCursor(142, 77);
-    auto perc = mBattery.percent();
+    float perc = mBattery.mCurPercent;
     mDisplay.printf("%.1f", perc+90);
     //display.fillRect(159, 78, 27, BATTERY_SEGMENT_HEIGHT, DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);//clear battery segments
     // if(VBAT > 4.1){
@@ -513,19 +512,20 @@ void Core::deepSleep() {
         // ESP_LOGE("", "%d input", i);
         pinMode(i, INPUT);
     }
-    Power::low();
+    Power::low(); // Needed? Can it be remembered? Cached TODO
 
     mTouch.setUp(kSettings.mUi.mDepth < 0);
 
-    ESP_LOGE("deepSleep", "sleeping");
+    // ESP_LOGE("deepSleep", "%ld", millis());
 
-    // esp_sleep_enable_timer_wakeup(1000000 - tv.tv_usec);
+    //esp_deep_sleep_disable_rom_logging();
+    //esp_sleep_enable_timer_wakeup(1000000 - mTime.getTimeval().tv_usec);
     // TODO SLEEP PLANING
-    if (mBattery.mCurVoltage < 2700 || mNow.Hour < 7) {
+    if (mBattery.mCurPercent < 100 || mNow.Hour < 7) {
         esp_sleep_enable_timer_wakeup((5 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
-    } else if (mBattery.mCurVoltage < 2900) {
+    } else if (mBattery.mCurPercent < 200) {
         esp_sleep_enable_timer_wakeup((4 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
-    } else if (mBattery.mCurVoltage < 3200) {
+    } else if (mBattery.mCurPercent < 500) {
         esp_sleep_enable_timer_wakeup((2 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
     } else {
         esp_sleep_enable_timer_wakeup((60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
