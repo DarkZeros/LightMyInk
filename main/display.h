@@ -29,18 +29,22 @@ class Display : public GxEPD2_EPD
     static constexpr GxEPD2::Panel panel = GxEPD2::GDEH0154D67;
     static constexpr bool hasColor = false;
     static constexpr bool hasPartialUpdate = true;
-    static constexpr bool hasFastPartialUpdate = true;
+    static constexpr bool hasFastPartialUpdate = false; // Faster if off than true
     static constexpr uint16_t power_on_time = 100; // ms, e.g. 95583us
     static constexpr uint16_t power_off_time = 150; // ms, e.g. 140621us
     static constexpr uint16_t full_refresh_time = 2600; // ms, e.g. 2509602us
     static constexpr uint16_t partial_refresh_time = 500; // ms, e.g. 457282us
+
+    static constexpr bool kReduceBoosterTime = true; // Saves ~200ms
+    static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixeSpeedier LUT (300ms)
+    
+    bool darkBorder = false; // adds a dark border outside the normal screen area
+    static RTC_DATA_ATTR bool displayFullInit; // Remembers when full init is required
+
     // constructor
     Display();
     void initDisplay();
     void setDarkBorder(bool darkBorder);
-    void asyncPowerOn();
-    void _PowerOnAsync();
-    bool waitingPowerOn = false;
     static void busyCallback(const void *);
     // methods (virtual)
     //  Support for Bitmaps (Sprites) to Controller Buffer and to Screen
@@ -75,10 +79,6 @@ class Display : public GxEPD2_EPD
     void powerOff(); // turns off generation of panel driving voltages, avoids screen fading over time
     void hibernate(); // turns powerOff() and sets controller to deep sleep for minimum power use, ONLY if wakeable by RST (rst >= 0)
 
-    bool darkBorder = false; // adds a dark border outside the normal screen area
-    bool inverted = false; // Inverts all colors in screen
-    static RTC_DATA_ATTR bool displayFullInit;
-    static constexpr bool reduceBoosterTime = true; // Saves ~200ms
   private:
     void _writeScreenBuffer(uint8_t command, uint8_t value);
     void _writeImage(uint8_t command, const uint8_t bitmap[], int16_t x, int16_t y, int16_t w, int16_t h, bool invert = false, bool mirror_y = false, bool pgm = false);

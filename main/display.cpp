@@ -22,9 +22,9 @@ bool Display::displayFullInit = true;
 
 void Display::busyCallback(const void *) {
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
-  
+
   // Turn OFF the FLASH during this long sleep?
-  esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF);
+  // esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF);
   // ESP_LOGE("lisghtSleep", "%ld", micros());
   
   esp_sleep_enable_gpio_wakeup();
@@ -34,22 +34,17 @@ void Display::busyCallback(const void *) {
 Display::Display() :
   GxEPD2_EPD(HW::DisplayPin::Cs, HW::DisplayPin::Dc, HW::DisplayPin::Res, HW::DisplayPin::Busy, HIGH, 10000000, WIDTH, HEIGHT, panel, hasColor, hasPartialUpdate, hasFastPartialUpdate)
 {
+  // ESP_LOGE("", "boot D %lu", micros());
   // Setup callback and SPI by default
   selectSPI(SPI, SPISettings(20000000, MSBFIRST, SPI_MODE0));
   setBusyCallback(busyCallback);
 }
 
 void Display::initDisplay() {
-  // Watchy default initialization
+  // default initialization
   init(0, displayFullInit, 1, true);
-}
-
-void Display::asyncPowerOn() {
-  // This is expensive if unused
-  if (!waitingPowerOn && !_hibernating) {
-    _InitDisplay();
-    _PowerOnAsync();
-  }
+  _InitDisplay();
+  _power_is_on = true; // This will avoid any power on calls, not needed because on refreh will power on the boosters
 }
 
 void Display::setDarkBorder(bool dark) {
@@ -124,7 +119,6 @@ void Display::_writeImage(uint8_t command, const uint8_t bitmap[], int16_t x, in
   int16_t h1 = y + h < int16_t(HEIGHT) ? h : int16_t(HEIGHT) - y; // limit
   int16_t dx = x1 - x;
   int16_t dy = y1 - y;
-  invert ^= inverted;
   w1 -= dx;
   h1 -= dy;
   if ((w1 <= 0) || (h1 <= 0)) return;
@@ -132,27 +126,32 @@ void Display::_writeImage(uint8_t command, const uint8_t bitmap[], int16_t x, in
   _setPartialRamArea(x1, y1, w1, h1);
   _startTransfer();
   _transferCommand(command);
-  for (int16_t i = 0; i < h1; i++)
-  {
-    for (int16_t j = 0; j < w1 / 8; j++)
+  if (h1 == HEIGHT && w1 == WIDTH && dx == 0 && dy == 0 && !invert) { // Optimization for common case
+    // ESP_LOGE("displ", "write! dx%d dy%d wb%d", dx, dy, wb);
+    _pSPIx->writeBytes(bitmap, HEIGHT*WIDTH/8);
+  } else {
+    for (int16_t i = 0; i < h1; i++)
     {
-      uint8_t data;
-      // use wb, h of bitmap for index!
-      int16_t idx = mirror_y ? j + dx / 8 + ((h - 1 - (i + dy))) * wb : j + dx / 8 + (i + dy) * wb;
-      if (pgm)
+      for (int16_t j = 0; j < w1 / 8; j++)
       {
-#if defined(__AVR) || defined(ESP8266) || defined(ESP32)
-        data = pgm_read_byte(&bitmap[idx]);
-#else
-        data = bitmap[idx];
-#endif
+        uint8_t data;
+        // use wb, h of bitmap for index!
+        int16_t idx = mirror_y ? j + dx / 8 + ((h - 1 - (i + dy))) * wb : j + dx / 8 + (i + dy) * wb;
+        if (pgm)
+        {
+  #if defined(__AVR) || defined(ESP8266) || defined(ESP32)
+          data = pgm_read_byte(&bitmap[idx]);
+  #else
+          data = bitmap[idx];
+  #endif
+        }
+        else
+        {
+          data = bitmap[idx];
+        }
+        if (invert) data = ~data;
+        _transfer(data);
       }
-      else
-      {
-        data = bitmap[idx];
-      }
-      if (invert) data = ~data;
-      _transfer(data);
     }
   }
   _endTransfer();
@@ -195,7 +194,6 @@ void Display::_writeImagePart(uint8_t command, const uint8_t bitmap[], int16_t x
   int16_t h1 = y + h < int16_t(HEIGHT) ? h : int16_t(HEIGHT) - y; // limit
   int16_t dx = x1 - x;
   int16_t dy = y1 - y;
-  invert ^= inverted;
   w1 -= dx;
   h1 -= dy;
   if ((w1 <= 0) || (h1 <= 0)) return;
@@ -368,27 +366,8 @@ void Display::_setPartialRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
   _endTransfer();
 }
 
-void Display::_PowerOnAsync()
-{
-  // if (_power_is_on)
-  //   return;
-  // _startTransfer();
-  // _transferCommand(0x22);
-  // _transfer(0xf8);
-  // //_transfer(0x38);
-  // _transferCommand(0x20);
-  // _endTransfer();
-  // waitingPowerOn = true;
-  _power_is_on = true;
-}
-
 void Display::_PowerOn()
 {
-  if (waitingPowerOn)
-  {
-    waitingPowerOn = false;
-    _waitWhileBusy("_PowerOn", power_on_time);
-  }
   if (_power_is_on)
     return;
   _startTransfer();
@@ -402,11 +381,6 @@ void Display::_PowerOn()
 
 void Display::_PowerOff()
 {
-  if (waitingPowerOn)
-  {
-    waitingPowerOn = false;
-    _waitWhileBusy("_PowerOn", power_on_time);
-  }
   if (!_power_is_on)
     return;
   _startTransfer();
@@ -433,7 +407,7 @@ void Display::_InitDisplay()
   _transfer(0x00);
   _transfer(0x00);
 
-  if (reduceBoosterTime) {
+  if (kReduceBoosterTime) {
     // SSD1675B controller datasheet
     _transferCommand(0x0C); // BOOSTER_SOFT_START_CONTROL
     // Set the driving strength of GDR for all phases to maximun 0b111 -> 0xF
@@ -460,7 +434,7 @@ void Display::_reset()
     GxEPD2_EPD::_reset();
     return;
   }
-  digitalWrite(_rst, LOW);
+  gpio_set_level((gpio_num_t)_rst, LOW);
   pinMode(_rst, OUTPUT);
   delay(_reset_duration); // TODO: Use a timer light sleep
 
@@ -501,30 +475,37 @@ void Display::_Update_Full()
 
 void Display::_Update_Part()
 {
-  _startTransfer();
-
-  // Write 50ºC fixed temp (fast update)
-  _transferCommand(0x1A);
-  _transfer(0x32);
-  _transfer(0x00);
-
-  _transferCommand(0x22);
   //_transferLUT();
 
-  _transfer(0b11011100); // part update + LUT + Leave power on
-  //_transfer(0b11011111); // part update + LUT + Leave power off
+  _startTransfer();
 
+  if (kFastUpdateTemp) {
+    // Write 50ºC fixed temp (fast update)
+    _transferCommand(0x1A);
+    _transfer(0x32);
+    _transfer(0x00);
+  }
+
+  _transferCommand(0x22);
+
+  if (kFastUpdateTemp) {
+    _transfer(0b11011100); // part update + LUT + Leave power on (we will hibernate straight away)
+  } else {
+    _transfer(0b11111100); // part update + Load Temp + LUT + Leave power on
+  }
+
+  // Notes:
+  // _transfer(0b11011100); // part update + LUT + Leave power on
+  // _transfer(0b11011111); // part update + LUT + Leave power off
   // _transfer(0b11111100); // part update + Load Temp + LUT + Leave power on
   // _transfer(0b11111111); // part update + Load Temp + LUT + Leave power off
-
-  // _transfer(0xff);
-  //
   //1xxxxxx1 // Enable Disable clock
   //x1xxxx1x // Enable disable analog
   //xx1xxxxx // Load temp
   //xxx1xxxx // Load LUT
   //xxxx1xxx // Display mode 2
   //xxxxx1xx // Display! 
+
   _transferCommand(0x20);
   _endTransfer();
   _waitWhileBusy("_Update_Part", partial_refresh_time);
@@ -535,6 +516,8 @@ void Display::_transferLUT()
   if (false) {
     return;
   }
+
+  _startTransfer();
 
   /*_transferCommand(0x33); // Read LUT
   unsigned char lut_partial_update_real[] =
@@ -614,11 +597,12 @@ void Display::_transferLUT()
   };
   for (int i=0; i<sizeof(lut_partial_update); i++)
     _transfer(lut_partial_update[i]);
+  _endTransfer();
 }
 
 void Display::_transferCommand(uint8_t value)
 {
-  if (_dc >= 0) digitalWrite(_dc, LOW);
+  if (_dc >= 0) gpio_set_level((gpio_num_t)_dc, LOW);
   SPI.transfer(value);
-  if (_dc >= 0) digitalWrite(_dc, HIGH);
+  if (_dc >= 0) gpio_set_level((gpio_num_t)_dc, HIGH);
 }

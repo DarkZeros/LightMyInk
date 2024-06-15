@@ -11,7 +11,7 @@ struct BatterySettings {
     uint8_t mSamples{1};
 
     // Runing average battery indicator
-    uint16_t mVoltage{0xFFFF};
+    uint16_t mVoltage{4200};
     uint8_t mAverages{16}; // How much to perform the running average
 
     // Historic data ? TODO

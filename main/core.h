@@ -31,11 +31,14 @@ private:
     void drawBatteryIcon(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
     void drawBattery(int16_t x, int16_t y);
 
+    uint8_t mainColor() const;
+    uint8_t backColor() const;
+
     DisplayBW mDisplay;
     Time mTime;
     Battery mBattery;
     Touch mTouch;
     
     const tmElements_t& mNow; 
-    const AnyItem mUi;
+    AnyItem mUi;
 };

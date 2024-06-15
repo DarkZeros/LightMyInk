@@ -40,7 +40,7 @@ Core::Core()
 , mTouch{kSettings.mTouch}
 , mNow{mTime.getElements()}
 , mUi{
-MenuItem{"Main Menu", {
+    MenuItem{"Main Menu", {
     MenuItem{"Clock", {
         // CustomItem{"Set Time", 
         //     [&](bool up) {
@@ -136,20 +136,22 @@ MenuItem{"Main Menu", {
         ActionItem{"Beep", [](){
             Peripherals::speaker(
                 std::vector<std::pair<int,int>>{
-                {3200,500},{0,500},{3200,500}
+                {3200,100},{0,500},{3200,100}
             });    
         }},
         ActionItem{"Tetris", [](){
             Peripherals::tetris(); 
         }},
     }},
-}}}
-{}
+}}
+}
+{
+    // ESP_LOGE("", "cend %lu", micros());
+}
 
 void Core::boot() {
 
-
-    //ESP_LOGE("deepSleep", "boot %ld", millis());
+    //ESP_LOGE("", "boot %lu", micros());
     mDisplay.epd2.initDisplay(); // TODO: Move it to constructor
     
     if (kSettings.mValid) {
@@ -214,7 +216,7 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1716064825, .tv_usec=0};
+    struct timeval tv{.tv_sec=1718058600, .tv_usec=0};
     struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
@@ -317,7 +319,7 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
 }
 
 void Core::showUi() {
-    mDisplay.fillScreen(GxEPD_WHITE);
+    mDisplay.fillScreen(backColor());
 
     // Text size for all the UI
     mDisplay.setTextSize(3);
@@ -328,15 +330,15 @@ void Core::showUi() {
         if constexpr (std::is_same_v<T, MenuItem>) {
             auto index = kSettings.mUi.mState[kSettings.mUi.mDepth];
             // Print the menu title on top, centered
-            mDisplay.setTextColor(GxEPD_BLACK, GxEPD_WHITE);
+            mDisplay.setTextColor(mainColor(), backColor());
             mDisplay.print(" ");
             mDisplay.println(e.name);
             //mDisplay.setCursor(mDisplay.getCursorX(), mDisplay.getCursorY() + 5);
             for(auto i = 0;i < e.items.size(); i++) {
                 if (i == index) {
-                    mDisplay.setTextColor(GxEPD_WHITE, GxEPD_BLACK);
+                    mDisplay.setTextColor(backColor(), mainColor());
                 } else {
-                    mDisplay.setTextColor(GxEPD_BLACK, GxEPD_WHITE);
+                    mDisplay.setTextColor(mainColor(), backColor());
                 }
                 // Depending on the menuitem type we might print differently
                 std::visit([&](auto&& sub){
@@ -363,7 +365,7 @@ void Core::showUi() {
             }
         } else if constexpr (std::is_same_v<T, NumberItem>) {
             // TODO: An Action Item renders its upper level menu, but with a selection mark
-            mDisplay.setTextColor(GxEPD_BLACK, GxEPD_WHITE);
+            mDisplay.setTextColor(mainColor(), backColor());
             mDisplay.println(e.get());
         }
     }, item);
@@ -431,9 +433,8 @@ void Core::drawDate(int16_t x, int16_t y){
 
 void Core::showWatchFace() {
     // FROM V0
-    bool DARKMODE = false;
-    mDisplay.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
-    mDisplay.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+    mDisplay.fillScreen(backColor());
+    mDisplay.setTextColor(mainColor());
     drawTime(4, 73);
     drawDate(17, 97);
     // drawBattery(100, 73+150);
@@ -448,7 +449,6 @@ void Core::showWatchFace() {
     // mDisplay.setTextSize(4);
     // mDisplay.print("ASD");
     mDisplay.display(!mDisplay.epd2.displayFullInit);
-    delay(2);
 }
 void Core::drawBatteryIcon(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
     mDisplay.drawRect(x + 2, y + 0, w - 4, h - 0, color);
@@ -458,10 +458,8 @@ void Core::drawBatteryIcon(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t 
     // mDisplay.drawRect(x + w, y + 4, 2, h - 8, color);
 }
 void Core::drawBattery(int16_t x, int16_t y) {
-    bool DARKMODE = false;
-
-    //mDisplay.drawBitmap(154, 73, battery, 37, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-    drawBatteryIcon(140, 73, 55, 23, GxEPD_BLACK);
+    //mDisplay.drawBitmap(154, 73, battery, 37, 21, mainColor());
+    drawBatteryIcon(140, 73, 55, 23, mainColor());
 
     mDisplay.setTextSize(2);
     mDisplay.setFont(NULL);
@@ -471,7 +469,7 @@ void Core::drawBattery(int16_t x, int16_t y) {
     mDisplay.setCursor(142, 77);
     float perc = mBattery.mCurPercent;
     mDisplay.printf("%.1f", perc+90);
-    //display.fillRect(159, 78, 27, BATTERY_SEGMENT_HEIGHT, DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);//clear battery segments
+    //display.fillRect(159, 78, 27, BATTERY_SEGMENT_HEIGHT, mainColor());//clear battery segments
     // if(VBAT > 4.1){
     //     batteryLevel = 3;
     // }
@@ -486,7 +484,7 @@ void Core::drawBattery(int16_t x, int16_t y) {
     // }
 
     // for(int8_t batterySegments = 0; batterySegments < batteryLevel; batterySegments++){
-    //     display.fillRect(159 + (batterySegments * BATTERY_SEGMENT_SPACING), 78, BATTERY_SEGMENT_WIDTH, BATTERY_SEGMENT_HEIGHT, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+    //     display.fillRect(159 + (batterySegments * BATTERY_SEGMENT_SPACING), 78, BATTERY_SEGMENT_WIDTH, BATTERY_SEGMENT_HEIGHT, mainColor());
     // }
 }
 
@@ -500,6 +498,8 @@ void Core::drawBattery(int16_t x, int16_t y) {
     // Select default voltage 2.6V
     setVoltage(false);
 }*/
+
+void extern RTC_IRAM_ATTR wake_stub_example(void);
 
 void Core::deepSleep() {
     mDisplay.hibernate();
@@ -516,10 +516,13 @@ void Core::deepSleep() {
 
     mTouch.setUp(kSettings.mUi.mDepth < 0);
 
-    // ESP_LOGE("deepSleep", "%ld", millis());
+    ESP_LOGE("deepSleep", "%ld", micros());
+
+    // Wake up stub
+    //esp_set_deep_sleep_wake_stub(&wake_stub_example);
 
     //esp_deep_sleep_disable_rom_logging();
-    //esp_sleep_enable_timer_wakeup(1000000 - mTime.getTimeval().tv_usec);
+    // esp_sleep_enable_timer_wakeup(1000000 - mTime.getTimeval().tv_usec);
     // TODO SLEEP PLANING
     if (mBattery.mCurPercent < 100 || mNow.Hour < 7) {
         esp_sleep_enable_timer_wakeup((5 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
@@ -541,6 +544,11 @@ void Core::deepSleep() {
 void Core::prepareDisplay() {
   mDisplay.setRotation(kSettings.mDisplay.mRotation);
   mDisplay.epd2.setDarkBorder(kSettings.mDisplay.mDarkBorder ^ kSettings.mDisplay.mInvert);
-  mDisplay.epd2.inverted = kSettings.mDisplay.mInvert;
-  mDisplay.epd2.asyncPowerOn();
+}
+
+uint8_t Core::mainColor() const {
+    return kSettings.mDisplay.mInvert ? 0xFF : 0x00; 
+}
+uint8_t Core::backColor() const {
+    return kSettings.mDisplay.mInvert ? 0x00 : 0xFF; 
 }

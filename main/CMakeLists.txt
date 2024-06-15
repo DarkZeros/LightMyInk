@@ -16,11 +16,7 @@ set(privrequires
 )
 
 set(srcs 
-    #hello_world_main.c
     main.cpp
-    #Watchy_7_SEG.cpp
-    #WatchyRTC.cpp
-    #Watchy.cpp
     display.cpp
     battery.cpp
     core.cpp
@@ -28,6 +24,9 @@ set(srcs
     touch.cpp
     peripherals.cpp
     time.cpp
+    draw.cpp
+
+    deep_sleep.cpp
 )
 
 set(CMAKE_CXX_STANDARD 23)

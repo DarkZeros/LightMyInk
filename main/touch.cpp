@@ -4,7 +4,9 @@
 #include "driver/touch_sensor.h"
 #include "esp_sleep.h"
 
-
+// This takes around 0.4ms
+// TODO: Is this needed all the time? Can't it be set up once?
+// touch_pad_fsm_start()
 void Touch::setUp(bool onlyMenuLight) {
   touch_pad_init();
   touch_pad_set_voltage(TOUCH_HVOLT_2V5, TOUCH_LVOLT_0V5, TOUCH_HVOLT_ATTEN_0V); 
