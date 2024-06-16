@@ -1,6 +1,7 @@
 #pragma once
 
 #include "display.h"
+#include "draw.h"
 #include "battery.h"
 #include "touch.h"
 #include "ui.h"
@@ -24,21 +25,14 @@ private:
     const AnyItem& findUi() const;
     void handleTouch(const touch_pad_t touch_pad);
     void showUi();
-    void showWatchFace();
-
-    void drawTime(int16_t x, int16_t y);
-    void drawDate(int16_t x, int16_t y);
-    void drawBatteryIcon(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
-    void drawBattery(int16_t x, int16_t y);
-
-    uint8_t mainColor() const;
-    uint8_t backColor() const;
 
     DisplayBW mDisplay;
     Time mTime;
     Battery mBattery;
     Touch mTouch;
-    
-    const tmElements_t& mNow; 
-    AnyItem mUi;
+
+    const tmElements_t& mNow;
+    const AnyItem mUi;
+
+    Draw mDraw;
 };

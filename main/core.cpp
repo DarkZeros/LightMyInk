@@ -4,33 +4,9 @@
 #include "touch.h"
 #include "peripherals.h"
 #include "hardware.h"
+#include "settings.h"
 
-RTC_DATA_ATTR struct Settings {
-    bool mValid {false};
-    bool mTouchWatchDog {false};
-
-    struct Menu {
-        std::array<uint8_t, 4> mState{}; // Up to 4 levels deep (increase if needed)
-        int8_t mDepth {-1};
-    } mUi;    
-
-    struct Clock {
-        uint32_t mCalibration{16000000};
-        bool mBeepHours : 1 {false};
-        uint8_t mBeepHoursStart : 5 {0};
-        uint8_t mBeepHoursEnd : 5 {24};
-    } mClock;
-
-    struct Display {
-        bool mInvert : 1 {false};
-        bool mDarkBorder : 1 {false};
-        uint8_t mRotation : 2 {2};
-    } mDisplay;
-
-    TimeSettings mTime;
-    TouchSettings mTouch;
-    BatterySettings mBattery;
-} kSettings;
+RTC_DATA_ATTR Settings kSettings;
 
 // This is required since we initialize the Adafruit EPD with our EPD
 Core::Core()
@@ -87,33 +63,37 @@ Core::Core()
             /*ActionItem{[](){
                 Peripherals::vibrator(std::vector<int>{75,75,75});}} },*/
         }},
-        MenuItem{"Beep", {
-            BoolItem{"Beep Hour",
-                [](){return kSettings.mClock.mBeepHours; },
-                [](bool val){ kSettings.mClock.mBeepHours = val; }
+        MenuItem{"Hour Notify", {
+            BoolItem{"Beep",
+                [](){return kSettings.mClock.mHourlyBeep; },
+                [](bool val){ kSettings.mClock.mHourlyBeep = val; }
+            },
+            BoolItem{"Vibrate",
+                [](){return kSettings.mClock.mHourlyVib; },
+                [](bool val){ kSettings.mClock.mHourlyVib = val; }
             },
             LoopItem{"St Hour",
-                []() -> int { return kSettings.mClock.mBeepHoursStart; },
-                [](){ kSettings.mClock.mBeepHoursStart = (kSettings.mClock.mBeepHoursStart + 1) % 24; }
+                []() -> int { return kSettings.mClock.mHourlyStart; },
+                [](){ kSettings.mClock.mHourlyStart = (kSettings.mClock.mHourlyStart + 1) % 24; }
             },
             LoopItem{"End Hour",
-                []() -> int { return kSettings.mClock.mBeepHoursEnd; },
-                [](){ kSettings.mClock.mBeepHoursEnd = (kSettings.mClock.mBeepHoursEnd + 1) % 24; }
+                []() -> int { return kSettings.mClock.mHourlyEnd; },
+                [](){ kSettings.mClock.mHourlyEnd = (kSettings.mClock.mHourlyEnd + 1) % 24; }
             }
         }},
     }},
     MenuItem{"Display", {
         BoolItem{"Invert",
-            [](){return kSettings.mDisplay.mInvert; },
-            [](bool val){ kSettings.mDisplay.mInvert = val; }
+            [](){return kSettings.mDraw.mInvert; },
+            [](bool val){ kSettings.mDraw.mInvert = val; }
         },
         BoolItem{"Border",
-            [](){return kSettings.mDisplay.mDarkBorder; },
-            [](bool val){ kSettings.mDisplay.mDarkBorder = val; }
+            [](){return kSettings.mDraw.mDarkBorder; },
+            [](bool val){ kSettings.mDraw.mDarkBorder = val; }
         },
         LoopItem{"Rotation",
-            []() -> int { return kSettings.mDisplay.mRotation; },
-            [](){ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
+            []() -> int { return kSettings.mDraw.mRotation; },
+            [](){ kSettings.mDraw.mRotation = (kSettings.mDraw.mRotation + 1) % 4; }
         },
     }},
     Item{"Touch"},
@@ -145,6 +125,7 @@ Core::Core()
     }},
 }}
 }
+, mDraw{kSettings.mDraw, mDisplay, mBattery, mNow}
 {
     // ESP_LOGE("", "cend %lu", micros());
 }
@@ -152,22 +133,10 @@ Core::Core()
 void Core::boot() {
 
     //ESP_LOGE("", "boot %lu", micros());
-    mDisplay.epd2.initDisplay(); // TODO: Move it to constructor
     
     if (kSettings.mValid) {
-        // Recover Settings from Disk
+        // Recover Settings from Disk // TODO
         kSettings.mValid = true;
-    }
-
-    // Beep conditions
-    if (kSettings.mClock.mBeepHours) {
-        if (mNow.Minute == 0 
-            && mNow.Hour > kSettings.mClock.mBeepHoursStart
-            && mNow.Hour < kSettings.mClock.mBeepHoursEnd)
-            Peripherals::speaker(
-                std::vector<std::pair<int,int>>{
-                {3200,100},{0,500},{3200,500}
-            });
     }
 
     //Wake up reason affects how to proceed
@@ -176,7 +145,7 @@ void Core::boot() {
     case ESP_SLEEP_WAKEUP_TOUCHPAD: { // Touch!
         auto touch_pad = esp_sleep_get_touchpad_wakeup_status();
         if (touch_pad != TOUCH_PAD_MAX) {
-            ESP_LOGE("", "pad %d", (int)touch_pad);
+            // ESP_LOGE("pad", "%d", (int)touch_pad);
             handleTouch(touch_pad);
         } else {
             ESP_LOGE("Touch", "TouchPad error");
@@ -198,13 +167,23 @@ void Core::boot() {
         break;
     }
 
-    prepareDisplay();
+    // Beep conditions
+    if (kSettings.mClock.mHourlyBeep) {
+        if (mNow.Minute == 0 
+            && wakeup_reason == ESP_SLEEP_WAKEUP_TIMER
+            && mNow.Hour > kSettings.mClock.mHourlyStart
+            && mNow.Hour < kSettings.mClock.mHourlyEnd)
+            Peripherals::speaker(
+                std::vector<std::pair<int,int>>{
+                {3200,100},{0,500},{3200,500}
+            });
+    }
 
-    // Show watch face or menu
+    // Show watch face or menu ?
     if (kSettings.mUi.mDepth < 0) {
-        showWatchFace();
+        mDraw.watchFace();
     } else {
-        showUi();
+        mDraw.menu(findUi(), kSettings.mUi.mState[kSettings.mUi.mDepth]);
     }
 
     deepSleep();
@@ -216,7 +195,7 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1718058600, .tv_usec=0};
+    struct timeval tv{.tv_sec=1718665000, .tv_usec=0};
     struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
@@ -246,7 +225,7 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
     Touch::Btn btn = static_cast<Touch::Btn>(HW::Touch::Num2Btn[touch_pad]);
 
     auto& ui = kSettings.mUi;
-    ESP_LOGE("ui", "depth%d st%d", ui.mDepth, ui.mState[ui.mDepth]);
+    // ESP_LOGE("ui", "depth%d st%d", ui.mDepth, ui.mState[ui.mDepth]);
 
     // Button press on the watchface
     if (ui.mDepth < 0) {
@@ -315,177 +294,7 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
             }
         }, item);
     } 
-    ESP_LOGE("ui", "depth%d st%d", ui.mDepth, ui.mState[ui.mDepth]);
-}
-
-void Core::showUi() {
-    mDisplay.fillScreen(backColor());
-
-    // Text size for all the UI
-    mDisplay.setTextSize(3);
-
-    auto item = findUi();
-    std::visit([&](auto&& e){
-        using T = std::decay_t<decltype(e)>;
-        if constexpr (std::is_same_v<T, MenuItem>) {
-            auto index = kSettings.mUi.mState[kSettings.mUi.mDepth];
-            // Print the menu title on top, centered
-            mDisplay.setTextColor(mainColor(), backColor());
-            mDisplay.print(" ");
-            mDisplay.println(e.name);
-            //mDisplay.setCursor(mDisplay.getCursorX(), mDisplay.getCursorY() + 5);
-            for(auto i = 0;i < e.items.size(); i++) {
-                if (i == index) {
-                    mDisplay.setTextColor(backColor(), mainColor());
-                } else {
-                    mDisplay.setTextColor(mainColor(), backColor());
-                }
-                // Depending on the menuitem type we might print differently
-                std::visit([&](auto&& sub){
-                    using U = std::decay_t<decltype(sub)>;
-                    if constexpr (std::is_same_v<U, BoolItem>) {
-                        // BoolItem show value + name
-                        mDisplay.print(sub.get() ? "O " : "X ");
-                        mDisplay.println(sub.name);
-                    } else if constexpr (std::is_same_v<U, LoopItem>) {
-                        // BoolItem show value + name
-                        mDisplay.print(sub.get());
-                        mDisplay.print(' ');
-                        mDisplay.println(sub.name);
-                    } else if constexpr (std::is_same_v<U, NumberItem>) {
-                        // BoolItem show value + name
-                        mDisplay.print(sub.get());
-                        mDisplay.print(' ');
-                        mDisplay.println(sub.name);
-                    } else {
-                        // Default just print the name
-                        mDisplay.println(sub.name);
-                    }
-                }, e.items[i]);
-            }
-        } else if constexpr (std::is_same_v<T, NumberItem>) {
-            // TODO: An Action Item renders its upper level menu, but with a selection mark
-            mDisplay.setTextColor(mainColor(), backColor());
-            mDisplay.println(e.get());
-        }
-    }, item);
-
-    mDisplay.display(true);
-}
-
-#include <Fonts/FreeMonoBold9pt7b.h>
-#include "DSEG7_Classic_Bold_53.h"
-#include "Seven_Segment10pt7b.h"
-#include "DSEG7_Classic_Regular_15.h"
-#include "DSEG7_Classic_Bold_25.h"
-#include "DSEG7_Classic_Regular_39.h"
-#include "icons.h"
-
-void Core::drawTime(int16_t x, int16_t y){
-    mDisplay.setFont(&DSEG7_Classic_Bold_53);
-    mDisplay.setCursor(x, y);
-    int displayHour;
-      displayHour = mNow.Hour;
-    if(displayHour < 10){
-        mDisplay.print("0");
-    }
-    mDisplay.print(displayHour);
-    mDisplay.print(":");
-    if(mNow.Minute < 10){
-        mDisplay.print("0");
-    }
-    mDisplay.println(mNow.Minute);
-}
-void Core::drawDate(int16_t x, int16_t y){
-    mDisplay.setFont(&Seven_Segment10pt7b);
-
-    mDisplay.setCursor(x, y);
-
-    // const char * weekDay = "SSMTWTF";
-    // for (int i = 1; i<8; i++) {
-    //     if (i == mNow.Wday) {
-    //         mDisplay.setTextColor(GxEPD_WHITE, GxEPD_BLACK);
-    //         mDisplay.getTextBounds(String(weekDay[i%7]), mDisplay.getCursorX(), mDisplay.getCursorY(), &x1, &y1, &w, &h);
-    //         mDisplay.fillRect(mDisplay.getCursorX(), mDisplay.getCursorY()-h, w+2, h+2, GxEPD_BLACK);
-    //     } else {
-    //         mDisplay.setTextColor(GxEPD_BLACK, GxEPD_WHITE);
-    //     }
-    //     mDisplay.print(weekDay[i%7]);
-    // }
-
-    String dayOfWeek = dayShortStr(mNow.Wday);
-    mDisplay.setCursor(x, y);
-    mDisplay.println(dayOfWeek);
-
-    String month = monthShortStr(mNow.Month);
-    mDisplay.setCursor(x + 70, y);
-    mDisplay.println(month);
-
-    mDisplay.setFont(&DSEG7_Classic_Regular_15);
-    mDisplay.setCursor(x + 40, y+1);
-    if(mNow.Day < 10){
-        mDisplay.print("0");
-    }
-    mDisplay.println(mNow.Day);
-    mDisplay.setCursor(x + 110, y+1);
-    mDisplay.println(tmYearToCalendar(mNow.Year));// offset from 1970, since year is stored in uint8_t
-}
-
-void Core::showWatchFace() {
-    // FROM V0
-    mDisplay.fillScreen(backColor());
-    mDisplay.setTextColor(mainColor());
-    drawTime(4, 73);
-    drawDate(17, 97);
-    // drawBattery(100, 73+150);
-    // mDisplay.print(mBattery.mCurVoltage);
-    mDisplay.setCursor(68, 120);
-    mDisplay.setFont(NULL);
-    mDisplay.setTextSize(2);
-    mDisplay.printf("%.1f%%", mBattery.mCurPercent * 0.1f);
-
-    // mDisplay.fillScreen(GxEPD_WHITE);
-    // mDisplay.setTextColor(GxEPD_BLACK);
-    // mDisplay.setTextSize(4);
-    // mDisplay.print("ASD");
-    mDisplay.display(!mDisplay.epd2.displayFullInit);
-}
-void Core::drawBatteryIcon(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
-    mDisplay.drawRect(x + 2, y + 0, w - 4, h - 0, color);
-    mDisplay.drawRect(x + 1, y + 1, w - 2, h - 2, color);
-    mDisplay.drawRect(x + 0, y + 2, w - 0, h - 4, color);
-    // Pointy end
-    // mDisplay.drawRect(x + w, y + 4, 2, h - 8, color);
-}
-void Core::drawBattery(int16_t x, int16_t y) {
-    //mDisplay.drawBitmap(154, 73, battery, 37, 21, mainColor());
-    drawBatteryIcon(140, 73, 55, 23, mainColor());
-
-    mDisplay.setTextSize(2);
-    mDisplay.setFont(NULL);
-    // mDisplay.setFont(&FreeMonoBold9pt7b);
-    // mDisplay.setFont(&Seven_Segment10pt7b);
-
-    mDisplay.setCursor(142, 77);
-    float perc = mBattery.mCurPercent;
-    mDisplay.printf("%.1f", perc+90);
-    //display.fillRect(159, 78, 27, BATTERY_SEGMENT_HEIGHT, mainColor());//clear battery segments
-    // if(VBAT > 4.1){
-    //     batteryLevel = 3;
-    // }
-    // else if(VBAT > 3.95 && VBAT <= 4.1){
-    //     batteryLevel = 2;
-    // }
-    // else if(VBAT > 3.80 && VBAT <= 3.95){
-    //     batteryLevel = 1;
-    // }
-    // else if(VBAT <= 3.80){
-    //     batteryLevel = 0;
-    // }
-
-    // for(int8_t batterySegments = 0; batterySegments < batteryLevel; batterySegments++){
-    //     display.fillRect(159 + (batterySegments * BATTERY_SEGMENT_SPACING), 78, BATTERY_SEGMENT_WIDTH, BATTERY_SEGMENT_HEIGHT, mainColor());
-    // }
+    // ESP_LOGE("ui", "depth%d st%d", ui.mDepth, ui.mState[ui.mDepth]);
 }
 
 /*void Core::NTPSync() {
@@ -518,11 +327,11 @@ void Core::deepSleep() {
 
     ESP_LOGE("deepSleep", "%ld", micros());
 
-    // Wake up stub
-    //esp_set_deep_sleep_wake_stub(&wake_stub_example);
+    // Wake up stub ?
+    // esp_set_deep_sleep_wake_stub(&wake_stub_example);
 
-    //esp_deep_sleep_disable_rom_logging();
-    // esp_sleep_enable_timer_wakeup(1000000 - mTime.getTimeval().tv_usec);
+    esp_sleep_enable_timer_wakeup(1000000 - mTime.getTimeval().tv_usec);
+    esp_deep_sleep_start();
     // TODO SLEEP PLANING
     if (mBattery.mCurPercent < 100 || mNow.Hour < 7) {
         esp_sleep_enable_timer_wakeup((5 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
@@ -537,18 +346,4 @@ void Core::deepSleep() {
     //esp_sleep_enable_timer_wakeup(10*1000000);
     esp_deep_sleep_start();
     ESP_LOGE("deepSleep", "never reach!");
-}
-
-// This function is called when the display will be used soon
-// and we need to setup the defaults from RTC/Settings
-void Core::prepareDisplay() {
-  mDisplay.setRotation(kSettings.mDisplay.mRotation);
-  mDisplay.epd2.setDarkBorder(kSettings.mDisplay.mDarkBorder ^ kSettings.mDisplay.mInvert);
-}
-
-uint8_t Core::mainColor() const {
-    return kSettings.mDisplay.mInvert ? 0xFF : 0x00; 
-}
-uint8_t Core::backColor() const {
-    return kSettings.mDisplay.mInvert ? 0x00 : 0xFF; 
 }

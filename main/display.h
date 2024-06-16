@@ -29,7 +29,7 @@ class Display : public GxEPD2_EPD
     static constexpr GxEPD2::Panel panel = GxEPD2::GDEH0154D67;
     static constexpr bool hasColor = false;
     static constexpr bool hasPartialUpdate = true;
-    static constexpr bool hasFastPartialUpdate = false; // Faster if off than true
+    static constexpr bool hasFastPartialUpdate = true; // We need to copy to both buffers
     static constexpr uint16_t power_on_time = 100; // ms, e.g. 95583us
     static constexpr uint16_t power_off_time = 150; // ms, e.g. 140621us
     static constexpr uint16_t full_refresh_time = 2600; // ms, e.g. 2509602us

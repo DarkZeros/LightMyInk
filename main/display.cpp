@@ -24,7 +24,7 @@ void Display::busyCallback(const void *) {
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
 
   // Turn OFF the FLASH during this long sleep?
-  // esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF);
+  esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF); // -0.3ms? -0.5%?
   // ESP_LOGE("lisghtSleep", "%ld", micros());
   
   esp_sleep_enable_gpio_wakeup();
@@ -201,27 +201,40 @@ void Display::_writeImagePart(uint8_t command, const uint8_t bitmap[], int16_t x
   _setPartialRamArea(x1, y1, w1, h1);
   _startTransfer();
   _transferCommand(command);
-  for (int16_t i = 0; i < h1; i++)
-  {
-    for (int16_t j = 0; j < w1 / 8; j++)
+  // ESP_LOGE("","mirror_y %d, x_part %d, y_part %d, dx %d, dy %d, wb_bitmap %d ", 
+  //              mirror_y, x_part, y_part, dx, dy, wb_bitmap);
+  if (dx == 0 && dy == 0 && mirror_y == 0 && wb_bitmap == 25) {
+    for (int16_t i = 0; i < h1; i++)
     {
-      uint8_t data;
-      // use wb_bitmap, h_bitmap of bitmap for index!
-      int16_t idx = mirror_y ? x_part / 8 + j + dx / 8 + ((h_bitmap - 1 - (y_part + i + dy))) * wb_bitmap : x_part / 8 + j + dx / 8 + (y_part + i + dy) * wb_bitmap;
-      if (pgm)
+      int16_t st = x_part / 8 + (y_part + i) * wb_bitmap;
+      int16_t en = x_part / 8 + w1 / 8 + (y_part + i) * wb_bitmap;
+      _pSPIx->writeBytes(bitmap + st, en - st);
+    }
+  } else {
+    for (int16_t i = 0; i < h1; i++)
+    {
+      for (int16_t j = 0; j < w1 / 8; j++)
       {
-#if defined(__AVR) || defined(ESP8266) || defined(ESP32)
-        data = pgm_read_byte(&bitmap[idx]);
-#else
-        data = bitmap[idx];
-#endif
+        uint8_t data;
+        // use wb_bitmap, h_bitmap of bitmap for index!
+        int16_t idx = mirror_y ? 
+          x_part / 8 + j + dx / 8 + ((h_bitmap - 1 - (y_part + i + dy))) * wb_bitmap : 
+          x_part / 8 + j + dx / 8 + (y_part + i + dy) * wb_bitmap;
+        if (pgm)
+        {
+  #if defined(__AVR) || defined(ESP8266) || defined(ESP32)
+          data = pgm_read_byte(&bitmap[idx]);
+  #else
+          data = bitmap[idx];
+  #endif
+        }
+        else
+        {
+          data = bitmap[idx];
+        }
+        if (invert) data = ~data;
+        _transfer(data);
       }
-      else
-      {
-        data = bitmap[idx];
-      }
-      if (invert) data = ~data;
-      _transfer(data);
     }
   }
   _endTransfer();

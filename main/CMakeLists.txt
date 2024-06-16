@@ -18,6 +18,7 @@ set(privrequires
 set(srcs 
     main.cpp
     display.cpp
+    draw.cpp
     battery.cpp
     core.cpp
     power.cpp

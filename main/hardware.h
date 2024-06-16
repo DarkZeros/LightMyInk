@@ -24,12 +24,4 @@ constexpr uint8_t kSpeakerPin = 26;
 constexpr uint8_t kVibratorPin = 27;
 constexpr uint8_t kVoltageSelectPin = 13;
 
-/*#define UP_BTN_MASK (uint64_t(1)<<GPIO_NUM_35)
-#define MENU_BTN_MASK (uint64_t(1)<<GPIO_NUM_26)
-#define BACK_BTN_MASK (uint64_t(1)<<GPIO_NUM_25)
-#define DOWN_BTN_MASK (uint64_t(1)<<GPIO_NUM_4)
-#define ACC_INT_MASK  (uint64_t(1)<<GPIO_NUM_14)
-#define BTN_PIN_MASK  MENU_BTN_MASK|BACK_BTN_MASK|UP_BTN_MASK|DOWN_BTN_MASK
-*/
-
 } // namespace HW

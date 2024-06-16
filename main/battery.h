@@ -15,8 +15,8 @@ struct BatterySettings {
     uint8_t mAverages{16}; // How much to perform the running average
 
     // Historic data ? TODO
-    time_t mFirstMeasure{0}; // When we started the bat stats
-    time_t mLastMeasure{0}; // When we did last measurement
+    //time_t mFirstMeasure{0}; // When we started the bat stats
+    //time_t mLastMeasure{0}; // When we did last measurement
     // The diff of both give us where we store/aggregate
     // ..
     /*uint16_t mDays[7]{}; // Last 7 days measures
