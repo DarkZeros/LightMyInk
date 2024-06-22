@@ -23,8 +23,8 @@ bool Display::displayFullInit = true;
 void Display::busyCallback(const void *) {
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
 
-  // Turn OFF the FLASH during this long sleep?
-  esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF); // -0.3ms? -0.5%?
+  // Turn OFF the FLASH during this long sleep? Not worth..
+  // esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF); // -0.3ms? -0.5%?
   // ESP_LOGE("lisghtSleep", "%ld", micros());
   
   esp_sleep_enable_gpio_wakeup();
@@ -430,9 +430,10 @@ void Display::_InitDisplay()
     _transfer(0xF4); // Phase3 Default value 0x96
     _transfer(0x00); // Duration of phases, Default 0xF = 0b00 11 11 (40ms Phase 1/2, 10ms Phase 3)
   }
-
-  _transferCommand(0x18); // Read built-in temperature sensor
-  _transfer(0x80);
+  // ?? Needed ? This only makes sense if we require to read the temperature outside
+  // Otherwise the display will auto-execute the temperature read
+  // _transferCommand(0x18); // Read built-in temperature sensor
+  // _transfer(0x80);
   _endTransfer();
 
   setDarkBorder(darkBorder);
@@ -454,6 +455,7 @@ void Display::_reset()
   // Maybe is not worth? Docs say 350us to sleep and 500us wake up
   // esp_sleep_enable_timer_wakeup( 1 * 1000);
   // esp_light_sleep_start();
+  // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
 
   pinMode(_rst, INPUT_PULLUP);
   // Tested calling _powerOn() inmediately, and works ok, no need to sleep

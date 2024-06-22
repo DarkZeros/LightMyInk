@@ -99,8 +99,8 @@ void Draw::watchFace() {
       w = mDisplay.gx_uint16_min(w, mDisplay.width() - x);
       h = mDisplay.gx_uint16_min(h, mDisplay.height() - y);
       mDisplay._rotate(x, y, w, h);
-      uint16_t y_part = mDisplay._reverse ? 200 - h - y : y;
-      mDisplay.epd2.writeImagePart(mDisplay._buffer, x, y_part, 200, mDisplay._page_height, x, y, w, h);
+      mDisplay.epd2.writeImagePart(mDisplay._buffer, x, y, 200, 200, x, y, w, h);
+      //mDisplay.writeRegion(x, y, x, y, w, h, false, false);
     };
 
 

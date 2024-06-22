@@ -35,8 +35,8 @@ class Display : public GxEPD2_EPD
     static constexpr uint16_t full_refresh_time = 2600; // ms, e.g. 2509602us
     static constexpr uint16_t partial_refresh_time = 500; // ms, e.g. 457282us
 
-    static constexpr bool kReduceBoosterTime = true; // Saves ~200ms
-    static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixeSpeedier LUT (300ms)
+    static constexpr bool kReduceBoosterTime = true; // Saves ~200ms + Reduce power usage
+    static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixedSpeedier LUT (300ms update)
     
     bool darkBorder = false; // adds a dark border outside the normal screen area
     static RTC_DATA_ATTR bool displayFullInit; // Remembers when full init is required
