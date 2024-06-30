@@ -26,7 +26,7 @@ private:
     void handleTouch(const touch_pad_t touch_pad);
     void showUi();
 
-    DisplayBW mDisplay;
+    Display1 mDisplay;
     Time mTime;
     Battery mBattery;
     Touch mTouch;

@@ -10,7 +10,7 @@ RTC_DATA_ATTR Settings kSettings;
 
 // This is required since we initialize the Adafruit EPD with our EPD
 Core::Core()
-: mDisplay{Display{}}
+: mDisplay{}
 , mTime{kSettings.mTime}
 , mBattery{kSettings.mBattery}
 , mTouch{kSettings.mTouch}

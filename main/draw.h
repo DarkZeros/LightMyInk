@@ -24,7 +24,8 @@ struct DrawSettings {
  */
 class Draw {
     DrawSettings& mSettings;
-    DisplayBW& mDisplay;
+    Display1& mDisplay;
+
     const Battery& mBattery;
     const tmElements_t& mNow;
 
@@ -43,7 +44,7 @@ class Draw {
     uint8_t backColor() const;
 
 public:
-    explicit Draw(DrawSettings& settings, DisplayBW& display, Battery& battery, const tmElements_t& now)
+    explicit Draw(DrawSettings& settings, Display1& display, Battery& battery, const tmElements_t& now)
     : mSettings(settings)
     , mDisplay{display}
     , mBattery(battery)

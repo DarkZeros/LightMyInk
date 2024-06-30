@@ -18,6 +18,238 @@
 #include "hardware.h"
 #include "driver/gpio.h"
 
+
+bool Display1::displayFullInit = true;
+
+void Display1::_startTransfer()
+{
+  SPI.beginTransaction(_spi_settings);
+  gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, LOW);
+}
+
+void Display1::_transfer(uint8_t value)
+{
+  SPI.transfer(value);
+}
+
+void Display1::_transfer(const uint8_t* value, size_t size)
+{
+  SPI.writeBytes(value, size);
+}
+
+void Display1::_transferCommand(uint8_t c)
+{
+  gpio_set_level((gpio_num_t)HW::DisplayPin::Dc, LOW);
+  SPI.transfer(c);
+  gpio_set_level((gpio_num_t)HW::DisplayPin::Dc, HIGH);
+}
+
+void Display1::_endTransfer()
+{
+  gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, HIGH);
+  SPI.endTransaction();
+}
+
+Display1::Display1() : Adafruit_GFX(WIDTH, HEIGHT) {
+  // Set pins
+  pinMode(HW::DisplayPin::Cs, OUTPUT);
+  pinMode(HW::DisplayPin::Dc, OUTPUT);
+  pinMode(HW::DisplayPin::Res, OUTPUT);
+  pinMode(HW::DisplayPin::Busy, INPUT);
+  digitalWrite(HW::DisplayPin::Cs, HIGH);
+  digitalWrite(HW::DisplayPin::Dc, HIGH);
+  digitalWrite(HW::DisplayPin::Res, HIGH);
+  
+  // Reset HW
+  gpio_set_level((gpio_num_t)HW::DisplayPin::Res, LOW);
+  pinMode(HW::DisplayPin::Res, OUTPUT);
+  delay(1); // TODO: Use a timer light sleep
+  // Maybe is not worth? Docs say 350us to sleep and 500us wake up
+  // esp_sleep_enable_timer_wakeup( 1 * 1000);
+  // esp_light_sleep_start();
+  // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+  pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
+
+  SPI.begin();
+
+  _startTransfer();
+  _transferCommand(0x01); // Driver output control
+  _transfer(0xC7);
+  _transfer(0x00);
+  _transfer(0x00);
+
+  if (kReduceBoosterTime) {
+    // SSD1675B controller datasheet
+    _transferCommand(0x0C); // BOOSTER_SOFT_START_CONTROL
+    // Set the driving strength of GDR for all phases to maximun 0b111 -> 0xF
+    // Set the minimum off time of GDR to minimum 0x4 (values below sould be same)
+    _transfer(0xF4); // Phase1 Default value 0x8B
+    _transfer(0xF4); // Phase2 Default value 0x9C
+    _transfer(0xF4); // Phase3 Default value 0x96
+    _transfer(0x00); // Duration of phases, Default 0xF = 0b00 11 11 (40ms Phase 1/2, 10ms Phase 3)
+  }
+
+  // setRamAdressMode
+  _transferCommand(0x11); // set ram entry mode
+  _transfer(0b00000011);  //  0: -Y,-X    1: -Y,X     2: Y,-X     3: Y,X
+
+  _endTransfer();
+}
+
+void Display1::setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
+  _startTransfer();
+  // _transferCommand(0x11); // set ram entry mode
+  // _transfer(0b00000011);  //  0: -Y,-X    1: -Y,X     2: Y,-X     3: Y,X
+  _transferCommand(0x44);  // X start & end positions (Byte)
+  _transfer(x / 8);
+  _transfer((x + w - 1) / 8);
+  _transferCommand(0x45); // Y start & end positions (Line)
+  _transfer(y % 256);
+  _transfer(y / 256);
+  _transfer((y + h - 1) % 256);
+  _transfer((y + h - 1) / 256);
+  _transferCommand(0x4e); // X start counter
+  _transfer(x / 8);
+  _transferCommand(0x4f); // Y start counter
+  _transfer(y % 256);
+  _transfer(y / 256);
+  _endTransfer();
+}
+
+
+void Display1::refresh(bool partial)
+{
+  _startTransfer();
+
+  if (kFastUpdateTemp) {
+    // Write 50ºC fixed temp (fast update)
+    _transferCommand(0x1A);
+    _transfer(0x32);
+    _transfer(0x00);
+  }
+
+  _transferCommand(0x22);
+
+  //1xxxxxx1 // Enable Disable clock
+  //x1xxxx1x // Enable disable analog
+  //xx1xxxxx // Load temp
+  //xxx1xxxx // Load LUT
+  //xxxx1xxx // Display mode 2
+  //xxxxx1xx // Display! 
+
+  constexpr auto kTurnOnLoadLutDisplay = 0b11010100;
+  constexpr auto kLoadTemp = 0b00100000;
+  constexpr auto kPartialMode = 0b00001000;
+
+  uint8_t updateCommand = kTurnOnLoadLutDisplay;
+  if (!kFastUpdateTemp) {
+    updateCommand |= kLoadTemp;
+  }
+  if (partial) {
+    updateCommand |= kPartialMode;
+  }
+  _transfer(updateCommand);
+  _transferCommand(0x20);
+  _endTransfer();
+
+  displayFullInit = false;
+
+  waitWhileBusy();
+}
+
+void Display1::waitWhileBusy() {
+  gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
+
+  // Turn OFF the FLASH during this long sleep? Not worth..
+  // esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF); // -0.3ms? -0.5%?
+  // ESP_LOGE("lisghtSleep", "%ld", micros());
+  
+  esp_sleep_enable_gpio_wakeup();
+  esp_light_sleep_start();
+}
+
+void Display1::setDarkBorder(bool dark) {
+  _startTransfer();
+  _transferCommand(0x3C); // BorderWavefrom
+  _transfer(dark ? 0x02 : 0x05);
+  _endTransfer();
+}
+
+void Display1::writeRegion(uint8_t x_part, uint8_t y_part, uint8_t x, uint8_t y, uint8_t w, uint8_t h, bool invert, bool mirror_y)
+{
+  if (x_part >= WIDTH) return;
+  if (y_part >= HEIGHT) return;
+  constexpr int8_t wb_bitmap = (WIDTH + 7) / 8; // width bytes, bitmaps are padded
+  x_part -= x_part % 8; // byte boundary
+  w = WIDTH - x_part < w ? WIDTH - x_part : w; // limit
+  h = HEIGHT - y_part < h ? HEIGHT - y_part : h; // limit
+  x -= x % 8; // byte boundary
+  w = 8 * ((w + 7) / 8); // byte boundary, bitmaps are padded
+  uint8_t w1 = x + w < WIDTH ? w : WIDTH - x; // limit
+  uint8_t h1 = y + h < HEIGHT ? h : HEIGHT - y; // limit
+  setRamArea(x, y, w1, h1);
+  _startTransfer();
+  _transferCommand(0x24);
+  auto xst = x_part / 8;
+  ESP_LOGE("","xst %d, y_part %d, x %d, y %d, h1 %d", 
+                xst, y_part, x, y, h1);
+  if (!invert) {
+    for (auto i = 0; i < h1; i++)
+    {
+      auto yoffset = (mirror_y ? ((HEIGHT - 1 - (y_part + i))) : (y_part + i)) * wb_bitmap;
+      // ESP_LOGE("","pos %d, size %d", xst + yoffset, w1 / 8);
+      SPI.writeBytes(buffer + xst + yoffset, w1 / 8);
+    }
+  } else {
+    for (auto i = 0; i < h1; i++)
+    {
+      for (auto j = 0; j < w1 / 8; j++)
+      {
+        // use wb_bitmap, h_bitmap of bitmap for index!
+        auto idx = mirror_y ? 
+          x_part / 8 + j + ((HEIGHT - 1 - (y_part + i))) * wb_bitmap : 
+          x_part / 8 + j + (y_part + i) * wb_bitmap;
+        uint8_t data = buffer[idx];
+        if (invert) data = ~data;
+        _transfer(data);
+      }
+    }
+  }
+  _endTransfer();
+}
+
+void Display1::writeAll(bool backbuffer)
+{
+  setRamArea(0, 0, 200, 200);
+  _startTransfer();
+  _transferCommand(backbuffer ? 0x26 : 0x24);
+  SPI.writeBytes(buffer, 200 * 200 / 8);
+  _endTransfer();
+}
+
+void Display1::hibernate()
+{
+  _startTransfer();
+  _transferCommand(0x10); // deep sleep mode
+  //_transfer(0x1);         // enter deep sleep, mode 1 (RAM reading allowed)
+  _transfer(0x11);         // enter deep sleep, mode 2 (no RAM reading allowed)
+  _endTransfer();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 bool Display::displayFullInit = true;
 
 void Display::busyCallback(const void *) {
@@ -176,9 +408,6 @@ void Display::_writeImagePart(uint8_t command, const uint8_t bitmap[], int16_t x
                                      int16_t x, int16_t y, int16_t w, int16_t h, bool invert, bool mirror_y, bool pgm)
 {
   if (_initial_write) writeScreenBuffer(); // initial full screen buffer clean
-#if defined(ESP8266) || defined(ESP32)
-  yield(); // avoid wdt
-#endif
   if ((w_bitmap < 0) || (h_bitmap < 0) || (w < 0) || (h < 0)) return;
   if ((x_part < 0) || (x_part >= w_bitmap)) return;
   if ((y_part < 0) || (y_part >= h_bitmap)) return;
@@ -203,7 +432,7 @@ void Display::_writeImagePart(uint8_t command, const uint8_t bitmap[], int16_t x
   _transferCommand(command);
   // ESP_LOGE("","mirror_y %d, x_part %d, y_part %d, dx %d, dy %d, wb_bitmap %d ", 
   //              mirror_y, x_part, y_part, dx, dy, wb_bitmap);
-  if (dx == 0 && dy == 0 && mirror_y == 0 && wb_bitmap == 25) {
+  if (dx == 0 && dy == 0 && mirror_y == 0 && wb_bitmap == 25 && !invert) {
     for (int16_t i = 0; i < h1; i++)
     {
       int16_t st = x_part / 8 + (y_part + i) * wb_bitmap;
@@ -238,9 +467,6 @@ void Display::_writeImagePart(uint8_t command, const uint8_t bitmap[], int16_t x
     }
   }
   _endTransfer();
-#if defined(ESP8266) || defined(ESP32)
-  yield(); // avoid wdt
-#endif
 }
 
 void Display::writeImage(const uint8_t* black, const uint8_t* color, int16_t x, int16_t y, int16_t w, int16_t h, bool invert, bool mirror_y, bool pgm)
@@ -351,18 +577,18 @@ void Display::hibernate()
   {
     _startTransfer();
     _transferCommand(0x10); // deep sleep mode
-    //_transfer(0x1);         // enter deep sleep
-    _transfer(0x11);         // enter deep sleep, no RAM
+    //_transfer(0x1);         // enter deep sleep, mode 1 (RAM reading allowed)
+    _transfer(0x11);         // enter deep sleep, mode 2 (no RAM reading allowed)
     _endTransfer();
     _hibernating = true;
   }
 }
-
 void Display::_setPartialRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
+  ESP_LOGE("partial", "x%d y%d w%d h%d", x, y, w, h);
   _startTransfer();
   _transferCommand(0x11); // set ram entry mode
-  _transfer(0x03);    // x increase, y increase : normal mode
+  _transfer(0b00000011);    // x increase, y increase : normal mode
   _transferCommand(0x44);
   _transfer(x / 8);
   _transfer((x + w - 1) / 8);
@@ -430,7 +656,7 @@ void Display::_InitDisplay()
     _transfer(0xF4); // Phase3 Default value 0x96
     _transfer(0x00); // Duration of phases, Default 0xF = 0b00 11 11 (40ms Phase 1/2, 10ms Phase 3)
   }
-  // ?? Needed ? This only makes sense if we require to read the temperature outside
+  // This only makes sense if we require to read the temperature outside
   // Otherwise the display will auto-execute the temperature read
   // _transferCommand(0x18); // Read built-in temperature sensor
   // _transfer(0x80);
@@ -438,7 +664,8 @@ void Display::_InitDisplay()
 
   setDarkBorder(darkBorder);
 
-  _setPartialRamArea(0, 0, WIDTH, HEIGHT);
+  // No need to do this here since it is done later on
+  // _setPartialRamArea(0, 0, WIDTH, HEIGHT); 
 }
 
 void Display::_reset()

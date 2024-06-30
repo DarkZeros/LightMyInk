@@ -2,8 +2,8 @@
 
 void Draw::initialize() {
   mDisplay.setRotation(mSettings.mRotation);
-  mDisplay.epd2.setDarkBorder(mSettings.mDarkBorder ^ mSettings.mInvert);
-  mDisplay.epd2.initDisplay();
+  // mDisplay.epd2.setDarkBorder(mSettings.mDarkBorder ^ mSettings.mInvert);
+  // mDisplay.epd2.initDisplay();
   mDisplay.fillScreen(backColor());
   mDisplay.setTextColor(mainColor());
 }
@@ -93,14 +93,15 @@ void Draw::watchFace() {
 
     auto& last = mSettings.mLastDraw;
 
-    auto copyImageToDisplay = [&](uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-      x = mDisplay.gx_uint16_min(x, mDisplay.width());
+    auto copyImageToDisplay = [&](uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
+      /*x = mDisplay.gx_uint16_min(x, mDisplay.width());
       y = mDisplay.gx_uint16_min(y, mDisplay.height());
       w = mDisplay.gx_uint16_min(w, mDisplay.width() - x);
       h = mDisplay.gx_uint16_min(h, mDisplay.height() - y);
       mDisplay._rotate(x, y, w, h);
-      mDisplay.epd2.writeImagePart(mDisplay._buffer, x, y, 200, 200, x, y, w, h);
-      //mDisplay.writeRegion(x, y, x, y, w, h, false, false);
+      mDisplay.epd2.writeImagePart(mDisplay._buffer, x, y, 200, 200, x, y, w, h);*/
+      mDisplay._rotate(x, y, w, h);
+      mDisplay.writeRegion(x, y, x, y, w, h, false, false);
     };
 
 
@@ -110,7 +111,7 @@ void Draw::watchFace() {
       std::array<uint8_t, 4> rect;
       std::function<void(void)> func;
     };
-    std::array<Composable, 6> composables{{
+    std::array<Composable, 5> composables{{
       {
         last.mTime.Hour != mNow.Hour,
         {{4, 20, 80, 53}},
@@ -135,16 +136,16 @@ void Draw::watchFace() {
         last.mTime.Year != mNow.Year || last.mTime.Month != mNow.Month || last.mTime.Day != mNow.Day,
         {{0, 75, 200, 24}},
         [&](){date(17, 97);} // 1ms cost, rarely updates, so better in one block
-      },
-      {
-        last.mBatery != mBattery.mCurPercent,
-        {{68, 110, 100, 30}},
-        [&](){
-          mDisplay.setCursor(68, 120);
-          mDisplay.setFont(NULL);
-          mDisplay.setTextSize(2);
-          mDisplay.printf("%.1f%%", mBattery.mCurPercent * 0.1);
-        }
+      // },
+      // {
+      //   last.mBatery != mBattery.mCurPercent,
+      //   {{68, 110, 100, 30}},
+      //   [&](){
+      //     mDisplay.setCursor(68, 120);
+      //     mDisplay.setFont(NULL);
+      //     mDisplay.setTextSize(2);
+      //     mDisplay.printf("%.1f%%", mBattery.mCurPercent * 0.1);
+      //   }
       }
     }};
     if (!last.mValid)
@@ -161,10 +162,13 @@ void Draw::watchFace() {
     }
     // Pass 2, update display
     if (!last.mValid){
-      mDisplay.display(!mDisplay.epd2.displayFullInit);
+      // mDisplay.display(!mDisplay.epd2.displayFullInit);
+      mDisplay.writeAllAndRefresh(!mDisplay.displayFullInit);
+      mDisplay.writeAll(); //This is to get ready for partial updates
     } else {
       // Manual refresh + swap buffers
-      mDisplay.epd2.refresh(!mDisplay.epd2.displayFullInit);
+      // mDisplay.epd2.refresh(!mDisplay.epd2.displayFullInit);
+      mDisplay.refresh(!mDisplay.displayFullInit);
 
       // Pass 3, copy again the updated parts to the other framebuffer
       for (auto& c : composables) {
@@ -269,5 +273,6 @@ void Draw::menu(const AnyItem& item, const uint8_t index) {
         }
     }, item);
 
-    mDisplay.display(true);
+    // mDisplay.display(true);
+    mDisplay.writeAllAndRefresh(true);
 }
