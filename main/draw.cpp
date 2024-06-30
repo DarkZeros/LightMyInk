@@ -2,9 +2,10 @@
 
 void Draw::initialize() {
   mDisplay.setRotation(mSettings.mRotation);
-  // mDisplay.epd2.setDarkBorder(mSettings.mDarkBorder ^ mSettings.mInvert);
-  // mDisplay.epd2.initDisplay();
-  mDisplay.fillScreen(backColor());
+  // TODO: Optimize, because display remembers it
+  mDisplay.setDarkBorder(mSettings.mDarkBorder ^ mSettings.mInvert);
+  if (!mSettings.mInvert) // Only need to clear the display if not inverted
+    mDisplay.fillScreen(backColor());
   mDisplay.setTextColor(mainColor());
 }
 
@@ -93,15 +94,10 @@ void Draw::watchFace() {
 
     auto& last = mSettings.mLastDraw;
 
-    auto copyImageToDisplay = [&](uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
-      /*x = mDisplay.gx_uint16_min(x, mDisplay.width());
-      y = mDisplay.gx_uint16_min(y, mDisplay.height());
-      w = mDisplay.gx_uint16_min(w, mDisplay.width() - x);
-      h = mDisplay.gx_uint16_min(h, mDisplay.height() - y);
+    auto copyImageToDisplay = [&](std::array<uint8_t, 4> rect) {
+      auto& [x, y, w, h] = rect;
       mDisplay._rotate(x, y, w, h);
-      mDisplay.epd2.writeImagePart(mDisplay._buffer, x, y, 200, 200, x, y, w, h);*/
-      mDisplay._rotate(x, y, w, h);
-      mDisplay.writeRegion(x, y, x, y, w, h, false, false);
+      mDisplay.writeRegion(x, y, w, h);
     };
 
 
@@ -157,23 +153,21 @@ void Draw::watchFace() {
       if (c.compose) {
         c.func();
         if (last.mValid) // Only copy if it was valid, otherwise we will copy later the full buffer
-          copyImageToDisplay(c.rect[0], c.rect[1], c.rect[2], c.rect[3]);
+          copyImageToDisplay(c.rect);
       }
     }
     // Pass 2, update display
     if (!last.mValid){
-      // mDisplay.display(!mDisplay.epd2.displayFullInit);
-      mDisplay.writeAllAndRefresh(!mDisplay.displayFullInit);
-      mDisplay.writeAll(); //This is to get ready for partial updates
+      mDisplay.writeAllAndRefresh();
+      mDisplay.writeAll(); // We need to write the other buffer for partial updates
     } else {
       // Manual refresh + swap buffers
-      // mDisplay.epd2.refresh(!mDisplay.epd2.displayFullInit);
-      mDisplay.refresh(!mDisplay.displayFullInit);
+      mDisplay.refresh();
 
       // Pass 3, copy again the updated parts to the other framebuffer
       for (auto& c : composables) {
         if (c.compose) {
-          copyImageToDisplay(c.rect[0], c.rect[1], c.rect[2], c.rect[3]);
+          copyImageToDisplay(c.rect);
         }
       }
     }
@@ -273,6 +267,5 @@ void Draw::menu(const AnyItem& item, const uint8_t index) {
         }
     }, item);
 
-    // mDisplay.display(true);
-    mDisplay.writeAllAndRefresh(true);
+    mDisplay.writeAllAndRefresh();
 }
