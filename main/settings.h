@@ -8,6 +8,7 @@
 struct Settings {
     bool mValid {false};
     bool mTouchWatchDog {false};
+    bool mLeakPinsSet {false};
 
     struct Menu {
         std::array<uint8_t, 4> mState{}; // Up to 4 levels deep (increase if needed)

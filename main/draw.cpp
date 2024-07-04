@@ -2,7 +2,6 @@
 
 void Draw::initialize() {
   mDisplay.setRotation(mSettings.mRotation);
-  // TODO: Optimize, because display remembers it
   mDisplay.setDarkBorder(mSettings.mDarkBorder ^ mSettings.mInvert);
   if (!mSettings.mInvert) // Only need to clear the display if not inverted
     mDisplay.fillScreen(backColor());
@@ -89,6 +88,9 @@ void Draw::date(int16_t x, int16_t y){
     mDisplay.println(tmYearToCalendar(mNow.Year));// offset from 1970, since year is stored in uint8_t
 }
 
+// static uint8_t RTC_DATA_ATTR drawCache[10 * 53 * 40 / 8];
+// static bool RTC_DATA_ATTR validDrawCache[10];
+
 void Draw::watchFace() {
     initialize();
 
@@ -104,37 +106,44 @@ void Draw::watchFace() {
     // Create a list of elements with the conditions to trigger them and how to compose
     struct Composable {
       bool compose;
+      bool drawCache;
       std::array<uint8_t, 4> rect;
       std::function<void(void)> func;
     };
     std::array<Composable, 5> composables{{
       {
         last.mTime.Hour != mNow.Hour,
+        false,
         {{4, 20, 80, 53}},
         [&](){time_hour(4, 73);} // 2ms cost
       },
       {
+        false,
         false,
         {{92, 0, 10, 53}},
         [&](){time_mid(92, 73);}
       },
       {
         last.mTime.Minute / 10 != mNow.Minute / 10,
+        false,
         {{104, 20, 40, 53}},
         [&](){time_min_10(104, 73);} // 1ms cost
       },
       {
-        last.mTime.Minute != mNow.Minute,
+        true, //last.mTime.Minute != mNow.Minute,
+        true,
         {{148, 20, 40, 53}},
         [&](){time_min_01(148, 73);} // 1ms cost
       },
       {
         last.mTime.Year != mNow.Year || last.mTime.Month != mNow.Month || last.mTime.Day != mNow.Day,
+        false,
         {{0, 75, 200, 24}},
         [&](){date(17, 97);} // 1ms cost, rarely updates, so better in one block
       // },
       // {
       //   last.mBatery != mBattery.mCurPercent,
+      //   false,
       //   {{68, 110, 100, 30}},
       //   [&](){
       //     mDisplay.setCursor(68, 120);
@@ -151,6 +160,9 @@ void Draw::watchFace() {
     // Pass 1, render them + copy
     for (auto& c : composables) {
       if (c.compose) {
+        // if (c.drawCache && validDrawCache[mNow.Minute % 10]) {
+
+        // }
         c.func();
         if (last.mValid) // Only copy if it was valid, otherwise we will copy later the full buffer
           copyImageToDisplay(c.rect);

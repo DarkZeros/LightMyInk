@@ -116,7 +116,7 @@ Core::Core()
         ActionItem{"Beep", [](){
             Peripherals::speaker(
                 std::vector<std::pair<int,int>>{
-                {3200,100},{0,500},{3200,100}
+                {3200,100},{0,200},{3200,100}
             });    
         }},
         ActionItem{"Tetris", [](){
@@ -195,7 +195,7 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1718665000, .tv_usec=0};
+    struct timeval tv{.tv_sec=1719908400, .tv_usec=0};
     struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
@@ -313,17 +313,21 @@ void extern RTC_IRAM_ATTR wake_stub_example(void);
 void Core::deepSleep() {
     mDisplay.hibernate();
 
-    // Set GPIOs 0-39 to input to avoid power leaking out
-    const uint64_t ignore = 0b11110001000000110000100111000010; // Ignore some GPIOs due to resets
-    for (int i = 0; i < GPIO_NUM_MAX; i++) {
-        if ((ignore >> i) & 0b1)
-            continue;
-        // ESP_LOGE("", "%d input", i);
-        pinMode(i, INPUT);
+    if (!kSettings.mLeakPinsSet) {
+        // Set all GPIOs to input that we are not using to avoid leaking power
+        // Set GPIOs 0-39 to input to avoid power leaking out
+        const uint64_t ignore = 0b11110001000000110000100111000010; // Ignore some GPIOs due to resets
+        for (int i = 0; i < GPIO_NUM_MAX; i++) {
+            if ((ignore >> i) & 0b1)
+                continue;
+            // ESP_LOGE("", "%d input", i);
+            pinMode(i, INPUT);
+        }
+        kSettings.mLeakPinsSet = true;
     }
-    Power::low(); // Needed? Can it be remembered? Cached TODO
+    Power::low();
 
-    mTouch.setUp(kSettings.mUi.mDepth < 0);
+    mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
 
     ESP_LOGE("deepSleep", "%ld", micros());
 
