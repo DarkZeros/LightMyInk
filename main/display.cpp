@@ -93,14 +93,14 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
 
     // setRamAdressMode
     _transferCommand(0x11); // set ram entry mode
-    _transfer(0b00000011);  //  0: -Y,-X    1: -Y,X     2: Y,-X     3: Y,X
+    _transfer(0b00000011);  //  0bYX adress mode (+1/-0)
 
     _endTransfer();
     state.initialized = true;
   }
 }
 
-void Display::setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
+void Display::_setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
   _transferCommand(0x44);  // X start & end positions (Byte)
   _transfer(x / 8);
   _transfer((x + w - 1) / 8);
@@ -165,14 +165,13 @@ void Display::waitWhileBusy() {
 }
 
 void Display::setDarkBorder(bool dark) {
-  if (state.darkBorder != dark)
-  {
-    _startTransfer();
-    _transferCommand(0x3C); // BorderWavefrom
-    _transfer(dark ? 0x02 : 0x05);
-    _endTransfer();
-    state.darkBorder = dark;
-  }
+  if (state.darkBorder == dark)
+    return
+  _startTransfer();
+  _transferCommand(0x3C); // BorderWavefrom
+  _transfer(dark ? 0x02 : 0x05);
+  _endTransfer();
+  state.darkBorder = dark;
 }
 
 void Display::writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
@@ -184,7 +183,7 @@ void Display::writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
   uint8_t w1 = x + w < WIDTH ? w : WIDTH - x; // limit
   uint8_t h1 = y + h < HEIGHT ? h : HEIGHT - y; // limit
   _startTransfer();
-  setRamArea(x, y, w1, h1);
+  _setRamArea(x, y, w1, h1);
   _transferCommand(0x24);
   auto xst = x / 8;
   for (auto i = 0; i < h1; i++)
@@ -209,7 +208,7 @@ void Display::writeAllAndRefresh(bool partial)
 void Display::writeAll(bool backbuffer)
 {
   _startTransfer();
-  setRamArea(0, 0, WIDTH, HEIGHT);
+  _setRamArea(0, 0, WIDTH, HEIGHT);
   _transferCommand(backbuffer ? 0x26 : 0x24);
   SPI.writeBytes(buffer, sizeof(buffer));
   _endTransfer();
