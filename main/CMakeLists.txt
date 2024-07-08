@@ -7,8 +7,7 @@ set(requires
     NTPClient
     ArduinoJson
     ArduinoNvs
-    pcf8563
-    GxEPD2
+    GfxLibrary
     Time
 )
 

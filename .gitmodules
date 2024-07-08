@@ -8,12 +8,6 @@
 [submodule "WiFiManager"]
 	path = components/WiFiManager/WiFiManager
 	url = https://github.com/tzapu/WiFiManager
-[submodule "pcf8563"]
-	path = components/pcf8563/pcf8563
-	url = https://github.com/orbitalair/Rtc_Pcf8563.git
-[submodule "GxEPD2"]
-	path = components/GxEPD2/GxEPD2
-	url = https://github.com/DarkZeros/GxEPD2
 [submodule "BusIO"]
 	path = components/GfxLibrary/Adafruit_BusIO
 	url = https://github.com/adafruit/Adafruit_BusIO
