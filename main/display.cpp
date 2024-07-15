@@ -11,12 +11,26 @@
 #include "hardware.h"
 #include "driver/gpio.h"
 
-RTC_DATA_ATTR Display::DisplayState Display::state;
+// The display will remember the config and RAM between runs
+// we can remember them and avoid expensive SPI calls
+RTC_DATA_ATTR struct DisplayState {
+  bool initialized : 1 {false};
+  bool backBufferValid : 1 {false};
+  bool darkBorder : 1 {false};
+  bool inverted : 1 {false};
+  bool postInvert : 1 {false};
+  bool partial : 1 {false};
+} kState;
 
 void Display::_startTransfer()
 {
   SPI.beginTransaction(_spi_settings);
   gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, LOW);
+}
+void Display::_endTransfer()
+{
+  gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, HIGH);
+  SPI.endTransaction();
 }
 
 void Display::_transfer(uint8_t value)
@@ -36,12 +50,6 @@ void Display::_transferCommand(uint8_t c)
   gpio_set_level((gpio_num_t)HW::DisplayPin::Dc, HIGH);
 }
 
-void Display::_endTransfer()
-{
-  gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, HIGH);
-  SPI.endTransaction();
-}
-
 Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   // Set pins
   pinMode(HW::DisplayPin::Cs, OUTPUT);
@@ -52,10 +60,11 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   digitalWrite(HW::DisplayPin::Dc, HIGH);
   digitalWrite(HW::DisplayPin::Res, HIGH);
   
-  // Reset HW
+  // Reset HW / Exit Deep Sleep
   gpio_set_level((gpio_num_t)HW::DisplayPin::Res, LOW);
   pinMode(HW::DisplayPin::Res, OUTPUT);
   delay(1); // TODO: Use a timer light sleep
+  // delayMicroseconds(100);
   // Maybe is not worth? Docs say 350us to sleep and 500us wake up
   // esp_sleep_enable_timer_wakeup( 1 * 1000);
   // esp_light_sleep_start();
@@ -65,13 +74,19 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   SPI.begin();
 
   // This only needs to be done once
-  if (!state.initialized)
+  if (!kState.initialized)
   {
     _startTransfer();
+    _transferCommand(0x12); // SW reset all values to factory defaults
+    _endTransfer();
+    waitWhileBusy();
+
+    _startTransfer();
     _transferCommand(0x01); // Driver output control
-    _transfer(0xC7);
-    _transfer(0x00);
-    _transfer(0x00);
+    _transfer(0xC7); // 0x0C7 is already the default
+    _transfer(0b0);
+    _transfer(0b000); // Gate scanning sequence, default 000
+    // TODO: Can implement mirror Y feature with this bit 001
 
     if (kReduceBoosterTime) {
       // SSD1675B controller datasheet
@@ -85,7 +100,7 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
     }
 
     if (kFastUpdateTemp) {
-      // Write 50ºC fixed temp (fast update)
+      // Write 50ºC fixed temp (fastest update, but less quality)
       _transferCommand(0x1A);
       _transfer(0x32);
       _transfer(0x00);
@@ -93,10 +108,14 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
 
     // setRamAdressMode
     _transferCommand(0x11); // set ram entry mode
-    _transfer(0b00000011);  //  0bYX adress mode (+1/-0)
+    _transfer(0b11);  //  0bYX adress mode (+1/-0), Default 0b11
+
+    // Set initial refresh mode
+    kState.partial = true; // Set it to force the first call
+    _setRefreshMode(false);
 
     _endTransfer();
-    state.initialized = true;
+    kState.initialized = true;
   }
 }
 
@@ -116,41 +135,52 @@ void Display::_setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
   //_transfer(0);
 }
 
+void Display::_setRefreshMode(bool partial)
+{
+  if (kState.partial == partial)
+    return;
+
+  //1xxxxxx1 // Enable Disable clock
+  //x1xxxx1x // Enable disable analog
+  //xx1xxxxx // Load temp
+  //xxx1xxxx // Load LUT
+  //xxxx1xxx // Display mode 2
+  //xxxxx1xx // Display! 
+
+  constexpr auto kTurnOnLoadLutDisplay = 0b11010100;
+  constexpr auto kLoadTemp = 0b00100000;
+  constexpr auto kPartialMode = 0b00001000;
+
+  uint8_t updateCommand = kTurnOnLoadLutDisplay;
+  if (!kFastUpdateTemp) {
+    updateCommand |= kLoadTemp;
+  }
+  if (partial) {
+    updateCommand |= kPartialMode;
+  }
+
+  _transferCommand(0x22);
+  _transfer(updateCommand);
+  kState.partial = partial;
+}
 
 void Display::refresh(bool partial)
 {
   _startTransfer();
-
-  if (state.partial != partial)
-  {
-    //1xxxxxx1 // Enable Disable clock
-    //x1xxxx1x // Enable disable analog
-    //xx1xxxxx // Load temp
-    //xxx1xxxx // Load LUT
-    //xxxx1xxx // Display mode 2
-    //xxxxx1xx // Display! 
-
-    constexpr auto kTurnOnLoadLutDisplay = 0b11010100;
-    constexpr auto kLoadTemp = 0b00100000;
-    constexpr auto kPartialMode = 0b00001000;
-
-    uint8_t updateCommand = kTurnOnLoadLutDisplay;
-    if (!kFastUpdateTemp) {
-      updateCommand |= kLoadTemp;
-    }
-    if (partial) {
-      updateCommand |= kPartialMode;
-    }
-
-    _transferCommand(0x22);
-    _transfer(updateCommand);
-    state.partial = partial;
-  }
-
+  _setRefreshMode(partial);
   _transferCommand(0x20);
   _endTransfer();
 
   waitWhileBusy();
+
+  // After a refresh, finalize the display inversion
+  if (kState.postInvert) {
+    kState.postInvert = false;
+    _startTransfer();
+    _transferCommand(0x21); // RAM for Display Update
+    _transfer(kState.inverted ? 0b10001000 : 0b0); // Set both front/backbuffer
+    _endTransfer();
+  }
 }
 
 void Display::waitWhileBusy() {
@@ -165,44 +195,100 @@ void Display::waitWhileBusy() {
 }
 
 void Display::setDarkBorder(bool dark) {
-  if (state.darkBorder == dark)
-    return
+  if (kState.darkBorder == dark)
+    return;
   _startTransfer();
   _transferCommand(0x3C); // BorderWavefrom
   _transfer(dark ? 0x02 : 0x05);
   _endTransfer();
-  state.darkBorder = dark;
+  kState.darkBorder = dark;
 }
 
-void Display::writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+void Display::setInverted(bool inverted) {
+  if (kState.inverted == inverted)
+    return;
+  _startTransfer();
+  _transferCommand(0x21); // RAM for Display Update
+  _transfer(inverted ? 0b1000 : 0b10000000); // Only invert the frontbuffer
+  _endTransfer();
+  kState.postInvert = true; // Queue the change for backbuffer
+  kState.inverted = inverted;
+}
+
+void Display::rotate(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const
 {
+  switch (getRotation())
+  {
+    case 1:
+      std::swap(x, y);
+      std::swap(w, h);
+      x = WIDTH - x - w;
+      break;
+    case 2:
+      x = WIDTH - x - w;
+      y = HEIGHT - y - h;
+      break;
+    case 3:
+      std::swap(x, y);
+      std::swap(w, h);
+      y = HEIGHT - y - h;
+      break;
+  }
+}
+
+void Display::getAlignedRegion(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const
+{
+  rotate(x, y, w, h);
+
+  // Align
   x -= x % 8; // byte boundary
   w = WIDTH - x < w ? WIDTH - x : w; // limit
   h = HEIGHT - y < h ? HEIGHT - y : h; // limit
+
   w = 8 * ((w + 7) / 8); // byte boundary, bitmaps are padded
-  uint8_t w1 = x + w < WIDTH ? w : WIDTH - x; // limit
-  uint8_t h1 = y + h < HEIGHT ? h : HEIGHT - y; // limit
+
+  w = x + w < WIDTH ? w : WIDTH - x; // limit
+  h = y + h < HEIGHT ? h : HEIGHT - y; // limit
+}
+
+void Display::writeRegionAligned(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+{
   _startTransfer();
-  _setRamArea(x, y, w1, h1);
+  _setRamArea(x, y, w, h);
   _transferCommand(0x24);
   auto xst = x / 8;
-  for (auto i = 0; i < h1; i++)
+  for (auto i = 0; i < h; i++)
   {
     auto yoffset = (y + i) * WB_BITMAP;
-    SPI.writeBytes(buffer + xst + yoffset, w1 / 8);
+    SPI.writeBytes(buffer + xst + yoffset, w / 8);
   }
   _endTransfer();
 }
 
+void Display::writeRegionAlignedPacked(const uint8_t* ptr, uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+{
+  _startTransfer();
+  _setRamArea(x, y, w, h);
+  // ESP_LOGE("area","%p, %d %d %d %d, size %d", ptr, x, y, w, h, ((uint16_t)h) * w / 8);
+  _transferCommand(0x24);
+  SPI.writeBytes(ptr, ((uint16_t)h) * w / 8);
+  _endTransfer();
+}
+
+void Display::writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+{
+  getAlignedRegion(x, y, w, h);
+  writeRegionAligned(x, y, w, h);
+}
+
 void Display::writeAllAndRefresh(bool partial)
 {
-  if (!state.backBufferValid) {
+  if (!kState.backBufferValid) {
     writeAll(true);
   }
   writeAll();
-  refresh(state.backBufferValid ? partial : false);
-  // writeAll(); // Do we need to write again? or we can save it
-  state.backBufferValid = true;
+  refresh(kState.backBufferValid ? partial : false);
+  kState.backBufferValid = true;
 }
 
 void Display::writeAll(bool backbuffer)

@@ -13,7 +13,15 @@
 
 #include "hardware.h"
 
+struct DisplaySettings {
+    // Settings that can be changed
+    bool mInvert : 1 {false};
+    bool mDarkBorder : 1 {false};
+    uint8_t mRotation : 2 {2};
+};
+
 class Display : public Adafruit_GFX {
+public:
   static constexpr uint8_t WIDTH = 200;
   static constexpr uint8_t HEIGHT = WIDTH;
   static constexpr uint8_t WB_BITMAP = (WIDTH + 7) / 8;
@@ -21,51 +29,17 @@ class Display : public Adafruit_GFX {
   static constexpr bool kReduceBoosterTime = true; // Saves ~200ms + Reduce power usage
   static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixedSpeedier LUT (300ms update)
   
-  // The display will remember the config and RAM between runs
-  // we can remember them and avoid extra SPI calls
-  struct DisplayState {
-    bool initialized : 1 {false};
-    bool backBufferValid : 1 {false};
-    bool darkBorder : 1 {false};
-    bool partial : 1 {false};
-  };
-  static DisplayState state;
 
-public:
   uint8_t buffer[WB_BITMAP * HEIGHT];
 
   SPISettings _spi_settings{20000000, MSBFIRST, SPI_MODE0};
 
   Display();
 
-  template <typename T> static inline void
-  _swap_(T & a, T & b)
-  {
-    T t = a;
-    a = b;
-    b = t;
-  };
-  void _rotate(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h)
-  {
-    switch (getRotation())
-    {
-      case 1:
-        _swap_(x, y);
-        _swap_(w, h);
-        x = WIDTH - x - w;
-        break;
-      case 2:
-        x = WIDTH - x - w;
-        y = HEIGHT - y - h;
-        break;
-      case 3:
-        _swap_(x, y);
-        _swap_(w, h);
-        y = HEIGHT - y - h;
-        break;
-    }
-  }
-  // Heavily optimize this
+  void rotate(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const;
+  void getAlignedRegion(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const;
+
+  // Heavily optimize this please
   void drawPixel(int16_t x, int16_t y, uint16_t color)
   {
     // if ((x < 0) || (x >= width()) || (y < 0) || (y >= height())) return;
@@ -73,7 +47,7 @@ public:
     switch (getRotation())
     {
       case 1:
-        _swap_(x, y);
+        std::swap(x, y);
         x = WIDTH - x - 1;
         break;
       case 2:
@@ -81,7 +55,7 @@ public:
         y = HEIGHT - y - 1;
         break;
       case 3:
-        _swap_(x, y);
+        std::swap(x, y);
         y = HEIGHT - y - 1;
         break;
     }
@@ -102,11 +76,14 @@ public:
   void drawFastRawHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
 
   void setDarkBorder(bool darkBorder);
+  void setInverted(bool inverted);
 
   void refresh(bool partial = true);
   void hibernate();
   void waitWhileBusy();
   void writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h);
+  void writeRegionAligned(uint8_t x, uint8_t y, uint8_t w, uint8_t h);
+  void writeRegionAlignedPacked(const uint8_t* ptr, uint8_t x, uint8_t y, uint8_t w, uint8_t h);
   void writeAll(bool backBuffer = false);
   void writeAllAndRefresh(bool partial = true);
 

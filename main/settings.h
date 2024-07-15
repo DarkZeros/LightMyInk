@@ -4,11 +4,13 @@
 #include "battery.h"
 #include "time.h"
 #include "touch.h"
+#include "watchface.h"
+#include "display.h"
 
 struct Settings {
-    bool mValid {false};
-    bool mTouchWatchDog {false};
-    bool mLeakPinsSet {false};
+    bool mValid : 1 {false};
+    bool mTouchWatchDog : 1 {false};
+    bool mLeakPinsSet : 1 {false};
 
     struct Menu {
         std::array<uint8_t, 4> mState{}; // Up to 4 levels deep (increase if needed)
@@ -23,8 +25,10 @@ struct Settings {
         uint8_t mHourlyEnd : 5 {24};
     } mClock;
 
-    DrawSettings mDraw;
     TimeSettings mTime;
     TouchSettings mTouch;
     BatterySettings mBattery;
+    DisplaySettings mDisplay;
+    WatchfaceSettings mWatchface;
 };
+extern struct Settings kSettings;

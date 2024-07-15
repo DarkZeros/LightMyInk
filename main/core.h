@@ -1,7 +1,7 @@
 #pragma once
 
 #include "display.h"
-#include "draw.h"
+#include "watchface.h"
 #include "battery.h"
 #include "touch.h"
 #include "ui.h"
@@ -19,12 +19,11 @@ public:
 
 private:
     void firstTimeBoot();
-    void prepareDisplay();
     void deepSleep(); // Set up device for deep sleep
 
     const AnyItem& findUi() const;
     void handleTouch(const touch_pad_t touch_pad);
-    void showUi();
+    void showMenu(const AnyItem& item, const uint8_t index);
 
     Display mDisplay;
     Time mTime;
@@ -33,6 +32,4 @@ private:
 
     const tmElements_t& mNow;
     const AnyItem mUi;
-
-    Draw mDraw;
 };

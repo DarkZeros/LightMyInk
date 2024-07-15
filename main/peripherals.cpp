@@ -202,6 +202,7 @@ ledc_channel_config_t ledc_channel[1] = {
         .timer_sel = LEDC_LS_TIMER,
         .duty = 0,
         .hpoint = 0,
+        .flags = 0,
     },
 };
 
@@ -210,7 +211,7 @@ ledc_timer_config_t ledc_timer = {
     .duty_resolution = LEDC_TIMER_2_BIT, // resolution of PWM duty
     .timer_num = LEDC_LS_TIMER,          // timer index
     .freq_hz = 100,                      // frequency of PWM signal
-    .clk_cfg = LEDC_USE_RTC8M_CLK,       // Force source clock to RTC8M
+    .clk_cfg = LEDC_USE_RC_FAST_CLK,     // Force source clock to RTC8M
 };
 
 void start_speaker(uint32_t freq)

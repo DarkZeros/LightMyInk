@@ -13,6 +13,8 @@
 
 #include "rom/gpio.h"
 
+#include "hardware.h"
+
 /*
  * Deep sleep wake stub function is a piece of code that will be loaded into 'RTC Fast Memory'.
  * The first way is to use the RTC_IRAM_ATTR attribute to place a function into RTC memory,
@@ -40,6 +42,40 @@ RTC_DATA_ATTR uint32_t wakeup_cause;
 // wakeup_time from CPU start to wake stub
 RTC_DATA_ATTR uint32_t wakeup_time;
 
+// void RTC_IRAM_ATTR delayMicroseconds(uint32_t us) {
+//   uint64_t m = (uint64_t)esp_timer_get_time();
+//   if (us) {
+//     uint64_t e = (m + us);
+//     if (m > e) {  //overflow
+//       while ((uint64_t)esp_timer_get_time() > e) {
+//         asm volatile("nop");
+//       }
+//     }
+//     while ((uint64_t)esp_timer_get_time() < e) {
+//       asm volatile("nop");
+//     }
+//   }
+// }
+
+void RTC_IRAM_ATTR _transfer(uint8_t value)
+{
+  for (auto i=0; i<8; i++)
+  {
+    // Set value
+    //GPIO_OUTPUT_SET(HW::DisplayPin::Sck, 0);
+    // Cycle Freq
+    //GPIO_OUTPUT_SET(HW::DisplayPin::Sck, 1);
+  }
+}
+
+void RTC_IRAM_ATTR _transferCommand(uint8_t value)
+{
+    GPIO_OUTPUT_SET(HW::DisplayPin::Dc, 0);
+    _transfer(value);
+    GPIO_OUTPUT_SET(HW::DisplayPin::Dc, 1);
+}
+
+
 // wake up stub function stored in RTC memory
 void RTC_IRAM_ATTR wake_stub_example(void)
 {
@@ -65,13 +101,30 @@ void RTC_IRAM_ATTR wake_stub_example(void)
         return;
     }
 
-    // Refresh the display!
+    // Reset display to wake it up
+    GPIO_OUTPUT_SET(HW::DisplayPin::Res, 0);
+    // pinMode(HW::DisplayPin::Res, OUTPUT);
+    //delay(1); // TODO: Use a timer light sleep
+    //pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
+
+    GPIO_OUTPUT_SET(HW::DisplayPin::Cs, 0);
     
-    // s_count is < s_max_count, go back to deep sleep.
-    GPIO_OUTPUT_SET(10, 1);
+
+    // Set the CS low to select our Display
+    GPIO_OUTPUT_SET(HW::DisplayPin::Cs, 0);
+
+    // Copy the new data to the display buffer?
+
+    // Refresh the display (the buffer was already set before)!
+    _transferCommand(0x20);
+    // Wait busy, or just sleep 400ms
+    _transferCommand(0x10); // change deep sleep mode
+    _transfer(0b01);  // mode 1 (RAM reading allowed)
+    // Finish! go back to deep sleep
+
 
     // Set wakeup time in stub, if need to check GPIOs or read some sensor periodically in the stub.
-    esp_wake_stub_set_wakeup_time(1 * 1000000);
+    esp_wake_stub_set_wakeup_time(1 * 1'000'000);
 
     // Print status.
     ESP_RTC_LOGE("wake stub: going to deep sleep");

@@ -6,6 +6,8 @@
 #include "hardware.h"
 #include "settings.h"
 
+#include "watchface_default.h"
+
 RTC_DATA_ATTR Settings kSettings;
 
 // This is required since we initialize the Adafruit EPD with our EPD
@@ -84,16 +86,16 @@ Core::Core()
     }},
     MenuItem{"Display", {
         BoolItem{"Invert",
-            [](){return kSettings.mDraw.mInvert; },
-            [](bool val){ kSettings.mDraw.mInvert = val; }
+            [](){return kSettings.mDisplay.mInvert; },
+            [](bool val){ kSettings.mDisplay.mInvert = val; }
         },
         BoolItem{"Border",
-            [](){return kSettings.mDraw.mDarkBorder; },
-            [](bool val){ kSettings.mDraw.mDarkBorder = val; }
+            [](){return kSettings.mDisplay.mDarkBorder; },
+            [](bool val){ kSettings.mDisplay.mDarkBorder = val; }
         },
         LoopItem{"Rotation",
-            []() -> int { return kSettings.mDraw.mRotation; },
-            [](){ kSettings.mDraw.mRotation = (kSettings.mDraw.mRotation + 1) % 4; }
+            []() -> int { return kSettings.mDisplay.mRotation; },
+            [](){ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
         },
     }},
     Item{"Touch"},
@@ -125,7 +127,6 @@ Core::Core()
     }},
 }}
 }
-, mDraw{kSettings.mDraw, mDisplay, mBattery, mNow}
 {
     // ESP_LOGE("", "cend %lu", micros());
 }
@@ -149,18 +150,16 @@ void Core::boot() {
             handleTouch(touch_pad);
         } else {
             ESP_LOGE("Touch", "TouchPad error");
-        } 
+        }
     } break;
-    case ESP_SLEEP_WAKEUP_TIMER: // Internal Timer 
+    case ESP_SLEEP_WAKEUP_TIMER: // Internal Timer
     case ESP_SLEEP_WAKEUP_EXT0: // RTC Alarm ?
         // Check alarms, vibration, beeps, etc.
-
         // Check watchdog -> reset to watchFace
         if (kSettings.mTouchWatchDog) {
             kSettings.mUi.mDepth = -1; // Reset to watchFace
         }
         kSettings.mTouchWatchDog = true;
-
         break;
     default: // Lets assume first time boot
         firstTimeBoot();
@@ -179,11 +178,25 @@ void Core::boot() {
             });
     }
 
+    // Common display preparations, post UI Events processing
+    auto& disp = kSettings.mDisplay;
+    mDisplay.setRotation(disp.mRotation);
+    mDisplay.setDarkBorder(disp.mDarkBorder ^ disp.mInvert);
+    mDisplay.setInverted(!disp.mInvert);
+    mDisplay.setTextColor(0xFF);
+
     // Show watch face or menu ?
     if (kSettings.mUi.mDepth < 0) {
-        mDraw.watchFace();
+        #define ARGS kSettings.mDisplay, kSettings.mWatchface, mDisplay, mBattery, mNow
+        // Instantiate the watchface type we are using
+        switch(kSettings.mWatchface.mType) {
+            default: DefaultWatchface(ARGS).draw(); break;
+            case 1: break;
+        }
+        #undef ARGS
     } else {
-        mDraw.menu(findUi(), kSettings.mUi.mState[kSettings.mUi.mDepth]);
+        kSettings.mWatchface.mLastDraw.mValid = false;
+        showMenu(findUi(), kSettings.mUi.mState[kSettings.mUi.mDepth]);
     }
 
     deepSleep();
@@ -195,8 +208,8 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1719908400, .tv_usec=0};
-    struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
+    struct timeval tv{.tv_sec=1721038200, .tv_usec=0};
+    // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
 
@@ -314,6 +327,7 @@ void Core::deepSleep() {
     mDisplay.hibernate();
 
     if (!kSettings.mLeakPinsSet) {
+        // Can take 1ms to run this code
         // Set all GPIOs to input that we are not using to avoid leaking power
         // Set GPIOs 0-39 to input to avoid power leaking out
         const uint64_t ignore = 0b11110001000000110000100111000010; // Ignore some GPIOs due to resets
@@ -329,13 +343,13 @@ void Core::deepSleep() {
 
     mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
 
-    ESP_LOGE("deepSleep", "%ld", micros());
+    // ESP_LOGE("deepSleep", "%ld", micros());
 
     // Wake up stub ?
     // esp_set_deep_sleep_wake_stub(&wake_stub_example);
 
-    esp_sleep_enable_timer_wakeup(1000000 - mTime.getTimeval().tv_usec);
-    esp_deep_sleep_start();
+    // esp_sleep_enable_timer_wakeup(2'000'000 - mTime.getTimeval().tv_usec);
+    // esp_deep_sleep_start();
     // TODO SLEEP PLANING
     if (mBattery.mCurPercent < 100 || mNow.Hour < 7) {
         esp_sleep_enable_timer_wakeup((5 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);

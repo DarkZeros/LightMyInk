@@ -4,7 +4,7 @@
 void Time::readTime() {
     gettimeofday(&mTv, NULL);
     // Apply timezone correction manually, since IDF does not handle it
-    timezone t;
+    // timezone t;
     // 
     breakTime(mTv.tv_sec, mElements);
 }
