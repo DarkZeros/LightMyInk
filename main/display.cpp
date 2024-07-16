@@ -24,11 +24,13 @@ RTC_DATA_ATTR struct DisplayState {
 
 void Display::_startTransfer()
 {
+  if (kSingleSPI) return;
   SPI.beginTransaction(_spi_settings);
   gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, LOW);
 }
 void Display::_endTransfer()
 {
+  if (kSingleSPI) return;
   gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, HIGH);
   SPI.endTransaction();
 }
@@ -56,7 +58,8 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   pinMode(HW::DisplayPin::Dc, OUTPUT);
   pinMode(HW::DisplayPin::Res, OUTPUT);
   pinMode(HW::DisplayPin::Busy, INPUT);
-  digitalWrite(HW::DisplayPin::Cs, HIGH);
+
+  digitalWrite(HW::DisplayPin::Cs, kSingleSPI ? LOW : HIGH);
   digitalWrite(HW::DisplayPin::Dc, HIGH);
   digitalWrite(HW::DisplayPin::Res, HIGH);
   
@@ -71,7 +74,9 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
 
-  SPI.begin();
+  SPI.begin(HW::DisplayPin::Sck, -1, HW::DisplayPin::Mosi);
+  if (kSingleSPI)
+    SPI.beginTransaction(_spi_settings);
 
   // This only needs to be done once
   if (!kState.initialized)
@@ -127,12 +132,12 @@ void Display::_setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
   _transfer(y);
   _transfer(0);
   _transfer((y + h - 1));
-  //_transfer(0);
+  //_transfer(0); // No need to write this, default is 0
   _transferCommand(0x4e); // X start counter
   _transfer(x / 8);
   _transferCommand(0x4f); // Y start counter
   _transfer(y);
-  //_transfer(0);
+  //_transfer(0); // No need to write this, default is 0
 }
 
 void Display::_setRefreshMode(bool partial)
@@ -308,9 +313,36 @@ void Display::hibernate()
   // _transfer(0b11); // mode 2 (no RAM reading allowed) // Doesn't work... why?
   // _transfer(0b10); // mode 2 as well?
   _endTransfer();
+  if (kSingleSPI)
+    SPI.beginTransaction(_spi_settings);
 }
 
 
+
+  void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
+  {
+    // check rotation, move pixel around if necessary
+    switch (getRotation())
+    {
+      case 1:
+        std::swap(x, y);
+        x = WIDTH - x - 1;
+        break;
+      case 2:
+        x = WIDTH - x - 1;
+        y = HEIGHT - y - 1;
+        break;
+      case 3:
+        std::swap(x, y);
+        y = HEIGHT - y - 1;
+        break;
+    }
+    auto& ptr = buffer[x / 8 + y * WB_BITMAP];
+    if (color)
+      ptr |= 1 << (7 - x % 8);
+    else
+      ptr &= ~(1 << (7 - x % 8));
+  }
 
 
 /**************************************************************************/

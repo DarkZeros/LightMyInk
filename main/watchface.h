@@ -35,7 +35,7 @@ struct WatchfaceSettings {
     // if the draw was valid or not, there is 128 bytes for extra data for the watchfaces
     struct {
         bool mValid{false}; // If the last draw was a watchface
-        uint8_t mMinuteU{}, mMinuteD{}; // The minutes are handled by base class
+        uint8_t mMinuteU[2]{}, mMinuteD{}; // Front and back buffers for Units
         uint8_t mStore[128]{}; // Scratch data the Watchfaces want to store
     } mLastDraw;
 };
@@ -70,7 +70,7 @@ public:
         DisplaySettings& dispSet,
         WatchfaceSettings& watchSet,
         Display& display, 
-        Battery& battery,
+        const Battery& battery,
         const tmElements_t& now)
     : mSettings{dispSet, watchSet}
     , mDisplay{display}

@@ -36,11 +36,14 @@ std::vector<Rect> DefaultWatchface::render() {
     store.mHour = mNow.Hour;
     mDisplay.setFont(&DSEG7_Classic_Bold_53);
     mDisplay.setCursor(4, 73);
+    if(mNow.Hour < 10){
+        mDisplay.print('0');
+    }
     mDisplay.print(mNow.Hour);
     rects.emplace_back(4, 20, 80, 53);
   }
 
-  //Date
+  // Date
   if (redraw || store.mDate != Store::Date{mNow.Year, mNow.Month, mNow.Day}) {
     store.mDate = Store::Date{mNow.Year, mNow.Month, mNow.Day};
     

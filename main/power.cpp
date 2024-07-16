@@ -1,7 +1,11 @@
 #include "power.h"
 #include "hardware.h"
 
+#include "esp_attr.h"
 #include "driver/gpio.h"
+
+RTC_DATA_ATTR bool kSet{false};
+RTC_DATA_ATTR bool kPrevVoltage{false};
 
 void Power::setVoltage(bool high) {
   constexpr const gpio_config_t kConf = {
@@ -11,6 +15,9 @@ void Power::setVoltage(bool high) {
     .pull_down_en = GPIO_PULLDOWN_DISABLE,
     .intr_type = GPIO_INTR_DISABLE,
   };
+  // Caches previous values
+  if (kSet && kPrevVoltage == high)
+    return;
 
   //Configure GPIO with the given settings
   gpio_config(&kConf);
@@ -27,4 +34,6 @@ void Power::setVoltage(bool high) {
   gpio_deep_sleep_hold_en();
 
   // ESP_LOGI("Power", "Changed to %d", high);
+  kSet = true;
+  kPrevVoltage = high;
 }

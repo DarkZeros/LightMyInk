@@ -14,7 +14,9 @@ namespace DisplayPin {
     constexpr uint8_t Cs = 5;
     constexpr uint8_t Res = 9;
     constexpr uint8_t Dc = 10;
+    constexpr uint8_t Sck = 18;
     constexpr uint8_t Busy = 19;
+    constexpr uint8_t Mosi = 23;
 }
 
 constexpr uint8_t kAdcPin = 34;

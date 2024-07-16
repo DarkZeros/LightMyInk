@@ -43,6 +43,8 @@ void Watchface::draw() {
   updateCache();
 
   auto& last = mSettings.mWatchface.mLastDraw;
+  const auto needUpdateD = !last.mValid || last.mMinuteD != mNow.Minute / 10;
+  const auto needUpdateU = !last.mValid || last.mMinuteU[0] != mNow.Minute % 10;
 
   auto copyCache2Display = [&](auto&& ptr, const Rect& r) {
     mDisplay.writeRegionAlignedPacked(ptr, r.x, r.y, r.w, r.h);
@@ -55,25 +57,24 @@ void Watchface::draw() {
         r.w / 8 
       );
   };
-  auto copyMinutes = [&]() {
-    if (!last.mValid || last.mMinuteD != mNow.Minute / 10) {
+
+  auto copyMinutesD = [&]() {
+    if (needUpdateD) {
       const auto& dec = mSettings.mWatchface.mCache.mDecimal;
       copyCache2Display(dec.data + dec.coord.size() * (mNow.Minute / 10), dec.coord);
     }
-    if (!last.mValid || last.mMinuteU != mNow.Minute % 10) {
+  };
+  auto copyMinutesU = [&]() {
+    if (needUpdateU) {
       const auto& units = mSettings.mWatchface.mCache.mUnits;
       copyCache2Display(units.data + units.coord.size() * (mNow.Minute % 10), units.coord);
     }
   };
   auto copyMinutes2Buffer = [&]() {
-    {
-      const auto& dec = mSettings.mWatchface.mCache.mDecimal;
-      copyCache2Buffer(dec.data + dec.coord.size() * (mNow.Minute / 10), dec.coord);
-    }
-    {
-      const auto& units = mSettings.mWatchface.mCache.mUnits;
-      copyCache2Buffer(units.data + units.coord.size() * (mNow.Minute % 10), units.coord);
-    }
+    const auto& dec = mSettings.mWatchface.mCache.mDecimal;
+    copyCache2Buffer(dec.data + dec.coord.size() * (mNow.Minute / 10), dec.coord);
+    const auto& units = mSettings.mWatchface.mCache.mUnits;
+    copyCache2Buffer(units.data + units.coord.size() * (mNow.Minute % 10), units.coord);
   };
 
   // Common components
@@ -89,23 +90,28 @@ void Watchface::draw() {
     copyMinutes2Buffer();
     mDisplay.writeAllAndRefresh();
     mDisplay.writeAll(); // We need to write the other buffer for partial updates
+    last.mMinuteU[0] = mNow.Minute % 10; // Both buffers are set
   } else {
     // Pass 1: Copy all to display
     for (const auto& c : composables)      
       copyAlignedRectToDisplay(c);
-    copyMinutes();
+    copyMinutesD();
+    copyMinutesU();
 
     // Manual refresh + swap buffers
     mDisplay.refresh();
 
-    // Pass 3, copy again the updated parts to the other framebuffer
+    // Pass 3, copy again the updated parts to the front framebuffer
     for (const auto& c : composables)      
       copyAlignedRectToDisplay(c);
-    copyMinutes();
+    copyMinutesD();
+    // Do not copy the minutes to frontbuffer, since we will likely
+    // change it next update, saving a few 300 * 8 * 0.05us = >106us = 200us;
   }
 
   // Store the values for next round
   last.mValid = true;
   last.mMinuteD = mNow.Minute / 10;
-  last.mMinuteU = mNow.Minute % 10;
+  last.mMinuteU[1] = last.mMinuteU[0]; // Move the front to Back
+  last.mMinuteU[0] = mNow.Minute % 10;
 }

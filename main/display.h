@@ -28,7 +28,7 @@ public:
 
   static constexpr bool kReduceBoosterTime = true; // Saves ~200ms + Reduce power usage
   static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixedSpeedier LUT (300ms update)
-  
+  static constexpr bool kSingleSPI = false; // Assumes only display uses SPI
 
   uint8_t buffer[WB_BITMAP * HEIGHT];
 
@@ -40,38 +40,14 @@ public:
   void getAlignedRegion(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const;
 
   // Heavily optimize this please
-  void drawPixel(int16_t x, int16_t y, uint16_t color)
-  {
-    // if ((x < 0) || (x >= width()) || (y < 0) || (y >= height())) return;
-    // check rotation, move pixel around if necessary
-    switch (getRotation())
-    {
-      case 1:
-        std::swap(x, y);
-        x = WIDTH - x - 1;
-        break;
-      case 2:
-        x = WIDTH - x - 1;
-        y = HEIGHT - y - 1;
-        break;
-      case 3:
-        std::swap(x, y);
-        y = HEIGHT - y - 1;
-        break;
-    }
-    auto& ptr = buffer[x / 8 + y * WB_BITMAP];
-    if (color)
-      ptr |= 1 << (7 - x % 8);
-    else
-      ptr &= ~(1 << (7 - x % 8));
-  }
-  void fillScreen(uint16_t color) // 0x0 black, >0x0 white, to buffer
+  void drawPixel(int16_t x, int16_t y, uint16_t color) override;
+  void fillScreen(uint16_t color) override
   {
     memset(buffer, (color) ? 0xFF : 0x00, sizeof(buffer));
   }
   // Optimized for our case from Canvas1
-  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
-  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
+  void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) override;
+  void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override;
   void drawFastRawVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
   void drawFastRawHLine(int16_t x, int16_t y, int16_t w, uint16_t color);
 
