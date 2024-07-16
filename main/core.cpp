@@ -343,13 +343,13 @@ void Core::deepSleep() {
 
     mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
 
-    // ESP_LOGE("deepSleep", "%ld", micros());
+    ESP_LOGE("deepSleep", "%ld", micros());
 
     // Wake up stub ?
-    // esp_set_deep_sleep_wake_stub(&wake_stub_example);
+    esp_set_deep_sleep_wake_stub(&wake_stub_example);
 
-    // esp_sleep_enable_timer_wakeup(2'000'000 - mTime.getTimeval().tv_usec);
-    // esp_deep_sleep_start();
+    esp_sleep_enable_timer_wakeup(2'000'000 - mTime.getTimeval().tv_usec);
+    esp_deep_sleep_start();
     // TODO SLEEP PLANING
     if (mBattery.mCurPercent < 100 || mNow.Hour < 7) {
         esp_sleep_enable_timer_wakeup((5 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
