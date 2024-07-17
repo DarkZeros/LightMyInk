@@ -2,7 +2,7 @@
 
 void Watchface::updateCache() {
   auto& cache = mSettings.mWatchface.mCache;
-  const auto& displ = mSettings.mWatchface.mCache;
+  const auto& displ = mSettings.mDisplay;
   const auto& watch = mSettings.mWatchface;
   if (cache.mDone && displ.mRotation == cache.mRotation && watch.mType == cache.mType)
     return; // Cache is valid!
