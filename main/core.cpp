@@ -1,5 +1,6 @@
 
 #include "core.h"
+#include "deep_sleep.h"
 #include "power.h"
 #include "touch.h"
 #include "peripherals.h"
@@ -208,7 +209,7 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1721038200, .tv_usec=0};
+    struct timeval tv{.tv_sec=1722881000, .tv_usec=0};
     // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
@@ -321,8 +322,6 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
     setVoltage(false);
 }*/
 
-void extern RTC_IRAM_ATTR wake_stub_example(void);
-
 void Core::deepSleep() {
     mDisplay.hibernate();
 
@@ -343,25 +342,45 @@ void Core::deepSleep() {
 
     mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
 
-    ESP_LOGE("deepSleep", "%ld", micros());
+    // ESP_LOGE("deepSleep", "%ld", micros());
 
-    // Wake up stub ?
-    esp_set_deep_sleep_wake_stub(&wake_stub_example);
+    // Calculate stepsize based on battery level or on battery save mode
+    auto stepSize = [&]() {
+        if (mBattery.mCurPercent < 100 || mNow.Hour < 7) { // TODO: Proper power save night mode
+            return 5;
+        } else if (mBattery.mCurPercent < 200) {
+            return 4;
+        } else if (mBattery.mCurPercent < 500) {
+            return 2;
+        } else {
+            return 1;
+        }
+    }();
 
-    esp_sleep_enable_timer_wakeup(2'000'000 - mTime.getTimeval().tv_usec);
-    esp_deep_sleep_start();
-    // TODO SLEEP PLANING
-    if (mBattery.mCurPercent < 100 || mNow.Hour < 7) {
-        esp_sleep_enable_timer_wakeup((5 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
-    } else if (mBattery.mCurPercent < 200) {
-        esp_sleep_enable_timer_wakeup((4 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
-    } else if (mBattery.mCurPercent < 500) {
-        esp_sleep_enable_timer_wakeup((2 * 60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
-    } else {
-        esp_sleep_enable_timer_wakeup((60 - mNow.Second) * 1000000 - mTime.getTimeval().tv_usec);
+    // TODO: When there is an alarm, we need to wake up earlier
+    auto nextFullWake = 60;
+    auto firstMinutesSleep = stepSize - mNow.Minute % stepSize;
+    auto nextPartialWake = firstMinutesSleep + mNow.Minute;
+    // In case the step overflows, we need to chop it, and wake up earlier
+    // kDSState.minutes will be exactly 0 after this trim
+    if (nextPartialWake > nextFullWake)
+        firstMinutesSleep -= nextPartialWake - nextFullWake;
+
+    // ESP_LOGE("", "nextFullWake %d firstMinutesSleep %d nextPartialWake %d", nextFullWake, firstMinutesSleep, nextPartialWake);
+
+    // We can only run wakeupstub when on watchface mode
+    if (kSettings.mUi.mDepth < 0) {
+        kDSState.currentMinutes = mNow.Minute + firstMinutesSleep;
+        kDSState.minutes = nextFullWake - mNow.Minute - firstMinutesSleep;
+        // ESP_LOGE("", "min %d", kDSState.minutes);
+        kDSState.stepSize = stepSize;
+        // Only trigger the wakeupstub if there is any minute left
+        if (kDSState.minutes > 0) 
+            esp_set_deep_sleep_wake_stub(&wake_stub_example);
     }
 
-    //esp_sleep_enable_timer_wakeup(10*1000000);
+    auto nextMinute = (60 - mNow.Second) * 1'000'000 - mTime.getTimeval().tv_usec;
+    esp_sleep_enable_timer_wakeup(nextMinute + (firstMinutesSleep - 1) * 60'000'000);
     esp_deep_sleep_start();
     ESP_LOGE("deepSleep", "never reach!");
 }

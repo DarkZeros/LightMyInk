@@ -13,10 +13,7 @@ void Watchface::updateCache() {
     mDisplay.getAlignedRegion(r.x, r.y, r.w, r.h);
     auto size = r.size();
     for (auto d=0; d<len; d++) {
-      if (units)
-        drawU(d);
-      else
-        drawD(d);
+      units ? drawU(d) : drawD(d);
       // Copy the area to the cache
       for(auto y=0; y<r.h; y++) {
         memcpy(
@@ -108,6 +105,9 @@ void Watchface::draw() {
     // Do not copy the minutes to frontbuffer, since we will likely
     // change it next update, saving a few 300 * 8 * 0.05us = >106us = 200us;
   }
+
+  // Set the display to partial always
+  mDisplay.setRefreshMode(true);
 
   // Store the values for next round
   last.mValid = true;

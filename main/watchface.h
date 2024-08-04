@@ -23,11 +23,11 @@ struct WatchfaceSettings {
 
         struct Units {
             Rect coord {}; 
-            uint8_t data[300 * 10]{};
+            uint8_t data[270 * 10]{};
         } mUnits;
         struct Decimal {
             Rect coord {};
-            uint8_t data[300 * 6]{};
+            uint8_t data[270 * 6]{};
         } mDecimal;
     } mCache;
 

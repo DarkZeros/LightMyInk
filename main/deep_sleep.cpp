@@ -32,115 +32,96 @@
  * 3) RTC memory must include any read-only data (.rodata) used by the wake stub.
  */
 
-// counter value, stored in RTC memory
-RTC_DATA_ATTR uint32_t s_count = 0;
-RTC_DATA_ATTR const uint32_t s_max_count = 10;
+#include "uspi.h"
+#include "deep_sleep.h"
 
-// wakeup_cause stored in RTC memory
-RTC_DATA_ATTR uint32_t wakeup_cause;
+RTC_DATA_ATTR DeepSleepState kDSState;
 
-// wakeup_time from CPU start to wake stub
-RTC_DATA_ATTR uint32_t wakeup_time;
-
-
-void RTC_IRAM_ATTR delayMicroseconds(uint32_t us) {
-  const auto ticks = esp_rom_get_cpu_ticks_per_us();
-  auto m = esp_cpu_get_cycle_count();
-  auto e = (m + us * ticks);
-  while (esp_cpu_get_cycle_count() < e) {
-    asm volatile("nop");
-  }
-}
-void RTC_IRAM_ATTR delayNanoseconds(uint32_t ns) {
-  const auto ticks = esp_rom_get_cpu_ticks_per_us();
-  auto m = esp_cpu_get_cycle_count();
-  auto e = (m + ns * ticks / 1000);
-  while (esp_cpu_get_cycle_count() < e) {
-    asm volatile("nop");
-  }
-}
-
-void RTC_IRAM_ATTR _transfer(uint8_t value)
-{
-  for (auto i=0; i<8; i++)
-  {
-    // Set value
-    GPIO_OUTPUT_SET(HW::DisplayPin::Mosi, (value >> (7-i)) & 0b1);
-    // Cycle Clock
-    delayMicroseconds(1);
-    GPIO_OUTPUT_SET(HW::DisplayPin::Sck, 1);
-    //delayNanoseconds(1000/20);
-    delayMicroseconds(1);
-    GPIO_OUTPUT_SET(HW::DisplayPin::Sck, 0);
-    //delayNanoseconds(1000/20);
-  }
-}
-
-void RTC_IRAM_ATTR _transferCommand(uint8_t value)
-{
-    GPIO_OUTPUT_SET(HW::DisplayPin::Dc, 0);
-    _transfer(value);
-    GPIO_OUTPUT_SET(HW::DisplayPin::Dc, 1);
-}
-
-#include "SPI.h"
+constexpr static int fixedDisplayUpdateMargin = 340'000;
 
 // wake up stub function stored in RTC memory
 void RTC_IRAM_ATTR wake_stub_example(void)
 {
-    // Get wakeup time.
-    wakeup_time = esp_cpu_get_cycle_count() / esp_rom_get_cpu_ticks_per_us();
-    // Get wakeup cause.
-    wakeup_cause = esp_wake_stub_get_wakeup_cause();
-    // Increment the counter.
-    s_count++;
-    // // Print the counter value and wakeup cause.
-    // ESP_RTC_LOGE("wake stub: wakeup count is %d, wakeup cause is %d, wakeup cost %ld us", s_count, wakeup_cause, wakeup_time);
+  if (kDSState.displayBusy) {
+    kDSState.displayBusy = false;
 
-    if (s_count >= s_max_count) {
-        // Reset s_count
-        s_count = 0;
+    uSpi::init();
 
-        // Set the default wake stub.
-        // There is a default version of this function provided in esp-idf.
-        esp_default_wake_deep_sleep();
-
-        // Return from the wake stub function to continue
-        // booting the firmware.
-        return;
+    if (kDSState.redrawDec) {
+      kDSState.redrawDec = false;
+      const auto& dec = kSettings.mWatchface.mCache.mDecimal;
+      uSpi::writeArea(dec.data + dec.coord.size()*kSettings.mWatchface.mLastDraw.mMinuteD, dec.coord.x, dec.coord.y, dec.coord.w, dec.coord.h);
     }
 
-    // Reset display to wake it up
-    GPIO_OUTPUT_SET(HW::DisplayPin::Res, 0);
-    // pinMode(HW::DisplayPin::Res, OUTPUT);
-    delayMicroseconds(1000);
-    //pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
-    GPIO_OUTPUT_SET(HW::DisplayPin::Res, 1);    
+    // Set display to sleep and go to sleep
+    uSpi::hibernate();
 
-    // Set the CS low to select our Display
-    GPIO_OUTPUT_SET(HW::DisplayPin::Cs, 0);
+    // Turn off all the GPIOs involved
+    using namespace HW::DisplayPin;
+    for (auto& pin : std::array{Cs, Dc, Res, Mosi, Sck})
+      GPIO_DIS_OUTPUT(pin);
 
-    // Copy the new data to the display buffer?
-    _transferCommand(0x3C); // BorderWavefrom
-    static RTC_DATA_ATTR bool dark = true;
-    _transfer(dark ? 0x02 : 0x05);
-    dark = !dark;
-
-    // Refresh the display (the buffer was already set before)!
-    _transferCommand(0x20);
-    // Wait busy, or just sleep 400ms
-    delayMicroseconds(400'000);
-    _transferCommand(0x10); // change deep sleep mode
-    _transfer(0b01);  // mode 1 (RAM reading allowed)
-    // Finish! go back to deep sleep
-
-
-    // // Set wakeup time in stub, if need to check GPIOs or read some sensor periodically in the stub.
-    esp_wake_stub_set_wakeup_time(1 * 1'000'000);
-
-    // // Print status.
-    // ESP_RTC_LOGE("wake stub: going to deep sleep");
+    // Guess the amount to sleep until next one and advance counters
+    kDSState.currentMinutes += kDSState.stepSize;
+    kDSState.minutes -= kDSState.stepSize;
+    if (kDSState.minutes >= 0)
+      esp_wake_stub_set_wakeup_time(kDSState.stepSize * 60'000'000 - fixedDisplayUpdateMargin);
+    else
+      esp_wake_stub_set_wakeup_time((kDSState.stepSize + kDSState.minutes) * 60'000'000 - fixedDisplayUpdateMargin);
 
     // Set stub entry, then going to deep sleep again.
     esp_wake_stub_sleep(&wake_stub_example);
+    esp_deep_sleep_start();
+  }
+
+  // Check if we should just do normal wakeup
+  // If it is not a timer wakeup, return to handle on the full mode
+  if (esp_wake_stub_get_wakeup_cause() != 8 || kDSState.minutes <= 0) {
+    // kDSState.wakeCause = esp_wake_stub_get_wakeup_cause();
+    // 8 for timer // 256 for touch
+    esp_default_wake_deep_sleep();
+    return;
+  }
+
+  // Reset display to wake it up
+  GPIO_INPUT_DISABLE(9); // TODO: Make it using the variable HW::DisplayPin::Res
+  GPIO_OUTPUT_SET(HW::DisplayPin::Res, 0);
+  uSpi::dMicroseconds(1000);
+  GPIO_OUTPUT_SET(HW::DisplayPin::Res, 1);
+
+  // Calculate the areas to update based on time and watchface states
+  const auto u = kDSState.currentMinutes % 10;
+  const auto d = kDSState.currentMinutes / 10;
+
+  auto& last = kSettings.mWatchface.mLastDraw;
+
+  uSpi::init();
+  if (u != last.mMinuteU[0]) {
+    // Write minute U
+    const auto& uni = kSettings.mWatchface.mCache.mUnits;
+    uSpi::writeArea(uni.data + uni.coord.size()*u, uni.coord.x, uni.coord.y, uni.coord.w, uni.coord.h);
+    last.mMinuteU[0] = last.mMinuteU[1];
+    last.mMinuteU[1] = u;
+  }
+  if (d != last.mMinuteD) {
+    // Write minute D + repeat it in the display hibernate
+    const auto& dec = kSettings.mWatchface.mCache.mDecimal;
+    uSpi::writeArea(dec.data + dec.coord.size()*d, dec.coord.x, dec.coord.y, dec.coord.w, dec.coord.h);
+    last.mMinuteD = d;
+    kDSState.redrawDec = true;
+  }
+  uSpi::refresh();
+  kDSState.displayBusy = true;
+
+  // Set to wake up again when the Display has finished
+  // THIS DOES NOT WORK, WHY?? I had to implement a hardcoded sleep
+  // gpio_pin_wakeup_enable(HW::DisplayPin::Busy, GPIO_PIN_INTR_LOLEVEL);
+  // esp_sleep_enable_gpio_wakeup();
+
+  // Set wakeup timer when we guess display will finish refreshing, to put it to sleep
+  esp_wake_stub_set_wakeup_time(fixedDisplayUpdateMargin);
+
+  // Set stub entry, then going to deep sleep again.
+  esp_wake_stub_sleep(&wake_stub_example);
+  esp_deep_sleep_start();
 }

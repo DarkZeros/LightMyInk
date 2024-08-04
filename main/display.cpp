@@ -13,7 +13,7 @@
 
 // The display will remember the config and RAM between runs
 // we can remember them and avoid expensive SPI calls
-RTC_DATA_ATTR struct DisplayState {
+static RTC_DATA_ATTR struct DisplayState {
   bool initialized : 1 {false};
   bool backBufferValid : 1 {false};
   bool darkBorder : 1 {false};
@@ -22,16 +22,20 @@ RTC_DATA_ATTR struct DisplayState {
   bool partial : 1 {false};
 } kState;
 
+const SPISettings Display::_spi_settings{kOverdriveSPI ? 26'666'666 : 20'000'000, MSBFIRST, SPI_MODE0};
+
 void Display::_startTransfer()
 {
   if (kSingleSPI) return;
   SPI.beginTransaction(_spi_settings);
-  gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, LOW);
+  if (!kCsHw)
+    gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, LOW);
 }
 void Display::_endTransfer()
 {
   if (kSingleSPI) return;
-  gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, HIGH);
+  if (!kCsHw)
+    gpio_set_level((gpio_num_t)HW::DisplayPin::Cs, HIGH);
   SPI.endTransaction();
 }
 
@@ -54,12 +58,14 @@ void Display::_transferCommand(uint8_t c)
 
 Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   // Set pins
-  pinMode(HW::DisplayPin::Cs, OUTPUT);
+  if (!kCsHw)
+    pinMode(HW::DisplayPin::Cs, OUTPUT);
   pinMode(HW::DisplayPin::Dc, OUTPUT);
   pinMode(HW::DisplayPin::Res, OUTPUT);
   pinMode(HW::DisplayPin::Busy, INPUT);
 
-  digitalWrite(HW::DisplayPin::Cs, kSingleSPI ? LOW : HIGH);
+  if (!kCsHw)
+    digitalWrite(HW::DisplayPin::Cs, kSingleSPI ? LOW : HIGH);
   digitalWrite(HW::DisplayPin::Dc, HIGH);
   digitalWrite(HW::DisplayPin::Res, HIGH);
   
@@ -74,7 +80,9 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
 
-  SPI.begin(HW::DisplayPin::Sck, -1, HW::DisplayPin::Mosi);
+  SPI.begin(HW::DisplayPin::Sck, -1, HW::DisplayPin::Mosi, kCsHw ? HW::DisplayPin::Cs : -1);
+  if (kCsHw)
+    SPI.setHwCs(true);
   if (kSingleSPI)
     SPI.beginTransaction(_spi_settings);
 
@@ -138,6 +146,16 @@ void Display::_setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
   _transferCommand(0x4f); // Y start counter
   _transfer(y);
   //_transfer(0); // No need to write this, default is 0
+}
+
+void Display::setRefreshMode(bool partial)
+{
+  if (kState.partial == partial)
+    return;
+
+  _startTransfer();
+  _setRefreshMode(partial);
+  _endTransfer();
 }
 
 void Display::_setRefreshMode(bool partial)
@@ -318,31 +336,30 @@ void Display::hibernate()
 }
 
 
-
-  void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
+void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
+{
+  // check rotation, move pixel around if necessary
+  switch (getRotation())
   {
-    // check rotation, move pixel around if necessary
-    switch (getRotation())
-    {
-      case 1:
-        std::swap(x, y);
-        x = WIDTH - x - 1;
-        break;
-      case 2:
-        x = WIDTH - x - 1;
-        y = HEIGHT - y - 1;
-        break;
-      case 3:
-        std::swap(x, y);
-        y = HEIGHT - y - 1;
-        break;
-    }
-    auto& ptr = buffer[x / 8 + y * WB_BITMAP];
-    if (color)
-      ptr |= 1 << (7 - x % 8);
-    else
-      ptr &= ~(1 << (7 - x % 8));
+    case 1:
+      std::swap(x, y);
+      x = WIDTH - x - 1;
+      break;
+    case 2:
+      x = WIDTH - x - 1;
+      y = HEIGHT - y - 1;
+      break;
+    case 3:
+      std::swap(x, y);
+      y = HEIGHT - y - 1;
+      break;
   }
+  auto& ptr = buffer[x / 8 + y * WB_BITMAP];
+  if (color)
+    ptr |= 1 << (7 - x % 8);
+  else
+    ptr &= ~(1 << (7 - x % 8));
+}
 
 
 /**************************************************************************/

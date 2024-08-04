@@ -22,6 +22,7 @@ std::vector<Rect> DefaultWatchface::render() {
     uint16_t mBattery{};
   };
   Store& store = *reinterpret_cast<Store*>(last.mStore);
+  assert(sizeof(Store) < sizeof(last.mStore));
 
   // Minute separator
   if (redraw) {

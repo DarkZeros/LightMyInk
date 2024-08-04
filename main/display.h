@@ -22,17 +22,19 @@ struct DisplaySettings {
 
 class Display : public Adafruit_GFX {
 public:
+  static constexpr bool kReduceBoosterTime = true; // Saves ~200ms + Reduce power usage
+  static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixedSpeedier LUT (300ms update)
+  static constexpr bool kSingleSPI = false; // Assumes only display uses SPI
+  static constexpr bool kCsHw = true; // Gives the SPI driver the Cs control
+  static constexpr bool kOverdriveSPI = false; // Uses a 25% faster SPI out of spec
+
   static constexpr uint8_t WIDTH = 200;
   static constexpr uint8_t HEIGHT = WIDTH;
   static constexpr uint8_t WB_BITMAP = (WIDTH + 7) / 8;
 
-  static constexpr bool kReduceBoosterTime = true; // Saves ~200ms + Reduce power usage
-  static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixedSpeedier LUT (300ms update)
-  static constexpr bool kSingleSPI = false; // Assumes only display uses SPI
-
   uint8_t buffer[WB_BITMAP * HEIGHT];
 
-  SPISettings _spi_settings{20000000, MSBFIRST, SPI_MODE0};
+  static const SPISettings _spi_settings;
 
   Display();
 
@@ -54,6 +56,7 @@ public:
   void setDarkBorder(bool darkBorder);
   void setInverted(bool inverted);
 
+  void setRefreshMode(bool partial); // To leave the mode in a known state
   void refresh(bool partial = true);
   void hibernate();
   void waitWhileBusy();
