@@ -37,7 +37,11 @@
 
 RTC_DATA_ATTR DeepSleepState kDSState;
 
-constexpr static int fixedDisplayUpdateMargin = 340'000;
+void RTC_IRAM_ATTR turnOffGpio() {
+  using namespace HW::DisplayPin;
+  for (auto& pin : std::array{Cs, Dc, Res, Busy, Mosi, Sck})
+    GPIO_DIS_OUTPUT(pin);
+}
 
 // wake up stub function stored in RTC memory
 void RTC_IRAM_ATTR wake_stub_example(void)
@@ -47,6 +51,23 @@ void RTC_IRAM_ATTR wake_stub_example(void)
 
     uSpi::init();
 
+    // Wait until display busy goes off & measure difference
+    GPIO_INPUT_ENABLE(19); // TODO: Make it using the variable HW::DisplayPin::Busy
+    auto ticks = esp_cpu_get_cycle_count();
+    while(GPIO_INPUT_GET(19) != 0) {
+      asm volatile("nop");
+    }
+    // FIXME: Empirically found it is 1/3 of time reported,
+    //  it reports 13ticks/us, but runs at 40Mhz likely (40ticks/us)
+    const auto rate = esp_rom_get_cpu_ticks_per_us() * 3;
+    const auto us = (esp_cpu_get_cycle_count() - ticks) / rate;
+    // Adjust up or down as needed, we want to wait for display <500us
+    if (us > 500)
+      kDSState.updateWait += us-500;
+    else if (us == 0) {
+      kDSState.updateWait -= 200;
+    }
+
     if (kDSState.redrawDec) {
       kDSState.redrawDec = false;
       const auto& dec = kSettings.mWatchface.mCache.mDecimal;
@@ -55,19 +76,15 @@ void RTC_IRAM_ATTR wake_stub_example(void)
 
     // Set display to sleep and go to sleep
     uSpi::hibernate();
-
-    // Turn off all the GPIOs involved
-    using namespace HW::DisplayPin;
-    for (auto& pin : std::array{Cs, Dc, Res, Mosi, Sck})
-      GPIO_DIS_OUTPUT(pin);
+    turnOffGpio();
 
     // Guess the amount to sleep until next one and advance counters
     kDSState.currentMinutes += kDSState.stepSize;
     kDSState.minutes -= kDSState.stepSize;
     if (kDSState.minutes >= 0)
-      esp_wake_stub_set_wakeup_time(kDSState.stepSize * 60'000'000 - fixedDisplayUpdateMargin);
+      esp_wake_stub_set_wakeup_time(kDSState.stepSize * 60'000'000 - kDSState.updateWait);
     else
-      esp_wake_stub_set_wakeup_time((kDSState.stepSize + kDSState.minutes) * 60'000'000 - fixedDisplayUpdateMargin);
+      esp_wake_stub_set_wakeup_time((kDSState.stepSize + kDSState.minutes) * 60'000'000 - kDSState.updateWait);
 
     // Set stub entry, then going to deep sleep again.
     esp_wake_stub_sleep(&wake_stub_example);
@@ -111,6 +128,7 @@ void RTC_IRAM_ATTR wake_stub_example(void)
     kDSState.redrawDec = true;
   }
   uSpi::refresh();
+  turnOffGpio();
   kDSState.displayBusy = true;
 
   // Set to wake up again when the Display has finished
@@ -119,7 +137,7 @@ void RTC_IRAM_ATTR wake_stub_example(void)
   // esp_sleep_enable_gpio_wakeup();
 
   // Set wakeup timer when we guess display will finish refreshing, to put it to sleep
-  esp_wake_stub_set_wakeup_time(fixedDisplayUpdateMargin);
+  esp_wake_stub_set_wakeup_time(kDSState.updateWait);
 
   // Set stub entry, then going to deep sleep again.
   esp_wake_stub_sleep(&wake_stub_example);

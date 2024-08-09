@@ -372,7 +372,7 @@ void Core::deepSleep() {
     if (kSettings.mUi.mDepth < 0) {
         kDSState.currentMinutes = mNow.Minute + firstMinutesSleep;
         kDSState.minutes = nextFullWake - mNow.Minute - firstMinutesSleep;
-        // ESP_LOGE("", "min %d", kDSState.minutes);
+        // ESP_LOGE("", "min %d step %d wait %ld", kDSState.minutes, stepSize, kDSState.updateWait);
         kDSState.stepSize = stepSize;
         // Only trigger the wakeupstub if there is any minute left
         if (kDSState.minutes > 0) 

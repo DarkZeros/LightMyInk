@@ -126,7 +126,9 @@ namespace uSpi {
 
   void RTC_IRAM_ATTR dMicroseconds(uint32_t us) {
     const auto m = esp_cpu_get_cycle_count();
-    const auto ticks = esp_rom_get_cpu_ticks_per_us();
+    // FIXME: Empirically found it is 1/3 of time reported,
+    //  it reports 13ticks/us, but runs at 40Mhz likely (40ticks/us)
+    const auto ticks = esp_rom_get_cpu_ticks_per_us() * 3;
     const auto e = (m + us * ticks);
     while (esp_cpu_get_cycle_count() < e) {
       asm volatile("nop");
