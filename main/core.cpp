@@ -126,6 +126,14 @@ Core::Core()
             Peripherals::tetris(); 
         }},
     }},
+    MenuItem{"Test2", {
+        ActionItem{"Light 1s", [](){
+            Peripherals::light(1'000'000);
+        }},
+        ActionItem{"Light 100s", [](){
+            Peripherals::light(100'000'000);
+        }},
+    }},
 }}
 }
 {
