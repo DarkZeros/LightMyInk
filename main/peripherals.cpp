@@ -17,13 +17,21 @@ void Peripherals::vibrator(std::vector<int> pattern) {
   gpio_config(&kConf);
 
   for(auto i = 0; i < pattern.size(); i++) {
-    gpio_set_level((gpio_num_t)HW::kVibratorPin, i & 1 ? 0 : 1);
+    gpio_set_level((gpio_num_t)HW::kVibratorPin, i % 2 ? 0 : 1);
     //delay(pattern[i]);
     esp_sleep_enable_timer_wakeup(pattern[i] * 1000);
     esp_light_sleep_start();
   }
-
   gpio_set_level((gpio_num_t)HW::kVibratorPin, 0);
+
+  constexpr const gpio_config_t kConfOff = {
+    .pin_bit_mask = (1ULL<<HW::kVibratorPin),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_ENABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+  };
+  gpio_config(&kConfOff);
 }
 
 void Peripherals::speaker(std::vector<std::pair<int, int>> pattern) {
@@ -47,6 +55,14 @@ void Peripherals::speaker(std::vector<std::pair<int, int>> pattern) {
     }
   }
   noTone(HW::kSpeakerPin);
+  constexpr const gpio_config_t kConfOff = {
+    .pin_bit_mask = (1ULL<<HW::kSpeakerPin),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+  };
+  gpio_config(&kConfOff);
 }
 
 
