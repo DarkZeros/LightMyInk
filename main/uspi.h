@@ -17,9 +17,9 @@
   REG_WRITE(GPIO_ENABLE_W1TC_REG, (1UL << pin));
 
 namespace uSpi {
-  void RTC_IRAM_ATTR init () {
-    spi_dev_t& dev = *(reinterpret_cast<volatile spi_dev_t *>(DR_REG_SPI3_BASE));
+  spi_dev_t& dev = *(reinterpret_cast<volatile spi_dev_t *>(DR_REG_SPI3_BASE));
 
+  void RTC_IRAM_ATTR init() {
     auto clockDiv = 266241; // or even 8193 for 26MHz SPI !
 
     // pinMode(HW::DisplayPin::Sck, INPUT);
@@ -65,7 +65,6 @@ namespace uSpi {
   }
 
   void RTC_IRAM_ATTR transfer(const void *data_in, uint32_t len) {
-    spi_dev_t& dev = *(reinterpret_cast<volatile spi_dev_t *>(DR_REG_SPI3_BASE));
     size_t longs = len >> 2;
     if (len & 3) {
         longs++;
@@ -126,9 +125,7 @@ namespace uSpi {
 
   void RTC_IRAM_ATTR dMicroseconds(uint32_t us) {
     const auto m = esp_cpu_get_cycle_count();
-    // FIXME: Empirically found it is 1/3 of time reported,
-    //  it reports 13ticks/us, but runs at 40Mhz likely (40ticks/us)
-    const auto ticks = esp_rom_get_cpu_ticks_per_us() * 3;
+    const auto ticks = esp_rom_get_cpu_ticks_per_us();
     const auto e = (m + us * ticks);
     while (esp_cpu_get_cycle_count() < e) {
       asm volatile("nop");
