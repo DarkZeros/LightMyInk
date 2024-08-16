@@ -207,6 +207,7 @@ void Display::refresh(bool partial)
 }
 
 void Display::waitWhileBusy() {
+  esp_sleep_enable_timer_wakeup(10'000'000); // Safe value
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
 
   // Turn OFF the FLASH during this long sleep? Not worth..
