@@ -114,7 +114,6 @@ Core::Core()
             Peripherals::speaker(std::vector<std::pair<int,int>>{
                 {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
                 {6400,1000},{10000,1000},{12000,1000}});
-            // delay(8000);
         }},
         ActionItem{"Beep", [](){
             Peripherals::speaker(

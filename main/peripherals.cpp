@@ -18,51 +18,108 @@ void Peripherals::vibrator(std::vector<int> pattern) {
 
   for(auto i = 0; i < pattern.size(); i++) {
     gpio_set_level((gpio_num_t)HW::kVibratorPin, i % 2 ? 0 : 1);
-    //delay(pattern[i]);
     esp_sleep_enable_timer_wakeup(pattern[i] * 1000);
     esp_light_sleep_start();
   }
   gpio_set_level((gpio_num_t)HW::kVibratorPin, 0);
-
-  constexpr const gpio_config_t kConfOff = {
-    .pin_bit_mask = (1ULL<<HW::kVibratorPin),
-    .mode = GPIO_MODE_INPUT,
-    .pull_up_en = GPIO_PULLUP_DISABLE,
-    .pull_down_en = GPIO_PULLDOWN_ENABLE,
-    .intr_type = GPIO_INTR_DISABLE,
-  };
-  gpio_config(&kConfOff);
 }
 
-void Peripherals::speaker(std::vector<std::pair<int, int>> pattern) {
-  // constexpr const gpio_config_t kConf = {
-  //   .pin_bit_mask = (1ULL<<HW::kSpeakerPin),
-  //   .mode = GPIO_MODE_OUTPUT,
-  //   .pull_up_en = GPIO_PULLUP_DISABLE,
-  //   .pull_down_en = GPIO_PULLDOWN_DISABLE,
-  //   .intr_type = GPIO_INTR_DISABLE,
-  // };
-  for(auto& [note, duration] : pattern) {
-    if (note == 0) {
-      esp_sleep_enable_timer_wakeup(duration * 1000);
-      esp_light_sleep_start();
-    } else {
-      tone(HW::kSpeakerPin, note, duration);
-      // TODO Sleep properly
-      delay(duration);
-      // esp_sleep_enable_timer_wakeup(duration * 1000);
-      // esp_light_sleep_start();
-    }
-  }
-  noTone(HW::kSpeakerPin);
-  constexpr const gpio_config_t kConfOff = {
-    .pin_bit_mask = (1ULL<<HW::kSpeakerPin),
-    .mode = GPIO_MODE_INPUT,
+void Peripherals::light(uint32_t us) {
+  constexpr const gpio_config_t kConf = {
+    .pin_bit_mask = (1ULL<<HW::kLightPin),
+    .mode = GPIO_MODE_OUTPUT,
     .pull_up_en = GPIO_PULLUP_DISABLE,
     .pull_down_en = GPIO_PULLDOWN_DISABLE,
     .intr_type = GPIO_INTR_DISABLE,
   };
-  gpio_config(&kConfOff);
+
+  //Configure GPIO with the given settings
+  gpio_config(&kConf);
+
+  gpio_set_level((gpio_num_t)HW::kLightPin, 1);
+  esp_sleep_enable_timer_wakeup(us);
+  esp_light_sleep_start();
+
+  gpio_set_level((gpio_num_t)HW::kLightPin, 0);
+}
+
+#include "driver/ledc.h"
+
+struct Speaker {
+  constexpr static auto kTimer = LEDC_TIMER_0;
+  constexpr static auto kChannel = LEDC_CHANNEL_0;
+  constexpr static auto kSpeedMode = LEDC_LOW_SPEED_MODE;
+  constexpr static auto kClock = LEDC_USE_RC_FAST_CLK;
+
+  Speaker() {
+    // Enable light sleep while Speaker active
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RC_FAST, ESP_PD_OPTION_ON);
+    gpio_sleep_sel_dis((gpio_num_t)HW::kSpeakerPin);
+
+    // Set up channel config, never changes
+    constexpr ledc_channel_config_t ledc_channel = {
+        .gpio_num = (gpio_num_t)HW::kSpeakerPin,
+        .speed_mode = kSpeedMode,
+        .channel = kChannel,
+        .intr_type = LEDC_INTR_DISABLE,
+        .timer_sel = kTimer,
+        .duty = 0,
+        .hpoint = 0,
+        .flags = {
+          .output_invert = 0,
+        }
+    };
+    ledc_channel_config(&ledc_channel);
+  }
+  ~Speaker() {
+    stop();
+  }
+
+  // Select resolution based on the frequency values, not to overflow or underflow divisor
+  ledc_timer_bit_t calc_resolution(uint32_t freq) {
+    if (freq < 64) return LEDC_TIMER_10_BIT;
+    if (freq < 128) return LEDC_TIMER_9_BIT;
+    if (freq < 256) return LEDC_TIMER_8_BIT;
+    if (freq < 512) return LEDC_TIMER_7_BIT;
+    if (freq < 1024) return LEDC_TIMER_6_BIT;
+    if (freq < 2 * 1024) return LEDC_TIMER_5_BIT;
+    if (freq < 4 * 1024) return LEDC_TIMER_4_BIT;
+    if (freq < 8 * 1024) return LEDC_TIMER_3_BIT;
+    if (freq < 16 * 1024) return LEDC_TIMER_2_BIT;
+    return LEDC_TIMER_1_BIT;
+  }
+
+  void set(uint32_t freq) {
+    if (freq == 0) {
+      stop();
+      return;
+    }
+    // Update timer + duty
+    ledc_timer_config_t ledc_timer = {
+      .speed_mode = kSpeedMode,
+      .duty_resolution = calc_resolution(freq),
+      .timer_num = kTimer,
+      .freq_hz = freq, // Set output frequency
+      .clk_cfg = kClock
+    };
+    ledc_timer_config(&ledc_timer);
+    ledc_set_duty(kSpeedMode, kChannel, ((1 << ledc_timer.duty_resolution) - 1));
+    ledc_update_duty(kSpeedMode, kChannel);
+  }
+
+  void stop() {
+    ledc_stop(kSpeedMode, kChannel, 0);
+  }
+};
+
+void Peripherals::speaker(std::vector<std::pair<int, int>> pattern) {
+  Speaker speaker;
+
+  for(auto& [note, duration] : pattern) {
+    speaker.set(note);
+    esp_sleep_enable_timer_wakeup(duration * 1000);
+    esp_light_sleep_start();
+  }
 }
 
 
@@ -203,53 +260,9 @@ int melody[] = {
 
 };
 
-#include "driver/ledc.h"
-
-#define LEDC_LS_TIMER LEDC_TIMER_0
-#define LEDC_LS_MODE LEDC_LOW_SPEED_MODE
-#define LEDC_LS_CH2_GPIO (26)
-#define LEDC_LS_CH2_CHANNEL LEDC_CHANNEL_2
-
-ledc_channel_config_t ledc_channel[1] = {
-    {
-        .gpio_num = LEDC_LS_CH2_GPIO,
-        .speed_mode = LEDC_LS_MODE,
-        .channel = LEDC_LS_CH2_CHANNEL,
-        .timer_sel = LEDC_LS_TIMER,
-        .duty = 0,
-        .hpoint = 0,
-        .flags = 0,
-    },
-};
-
-ledc_timer_config_t ledc_timer = {
-    .speed_mode = LEDC_LS_MODE,          // timer mode
-    .duty_resolution = LEDC_TIMER_2_BIT, // resolution of PWM duty
-    .timer_num = LEDC_LS_TIMER,          // timer index
-    .freq_hz = 100,                      // frequency of PWM signal
-    .clk_cfg = LEDC_USE_RC_FAST_CLK,     // Force source clock to RTC8M
-};
-
-void start_speaker(uint32_t freq)
-{
-  ledc_timer.freq_hz = freq;
-  ledc_timer_config(&ledc_timer);
-  ledc_channel_config(&ledc_channel[0]);
-  ledc_set_duty(ledc_channel[0].speed_mode, ledc_channel[0].channel, 1);
-  ledc_update_duty(ledc_channel[0].speed_mode, ledc_channel[0].channel);
-}
-
-void stop_speaker()
-{
-  ledc_set_duty(ledc_channel[0].speed_mode, ledc_channel[0].channel, 0);
-  ledc_update_duty(ledc_channel[0].speed_mode, ledc_channel[0].channel);
-}
-
 void Peripherals::tetris() {
+  Speaker speaker;
   int notes=sizeof(melody)/sizeof(melody[0])/2; 
-
-  //ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC8M, ESP_PD_OPTION_ON));
-  //ESP_ERROR_CHECK(gpio_sleep_sel_dis((gpio_num_t)HW::kSpeakerPin)); // Needed for light sleep.
 
   // this calculates the duration of a whole note in ms (60s/tempo)*4 beats
   int wholenote = (60000 * 4) / tempo;
@@ -269,40 +282,12 @@ void Peripherals::tetris() {
     }
 
     // we only play the note for 90% of the duration, leaving 10% as a pause
-    tone(HW::kSpeakerPin, melody[thisNote], noteDuration*0.9);
-    //ledcAttach(HW::kSpeakerPin, melody[thisNote], 10);
-    //ledcWriteTone(HW::kSpeakerPin, melody[thisNote]);
-    //delay(noteDuration);
-    //start_speaker(melody[thisNote]);
-    //esp_sleep_enable_timer_wakeup(noteDuration*0.9*1000); //light sleep for 2 seconds
-    //esp_light_sleep_start();
+    speaker.set(melody[thisNote]);
+    esp_sleep_enable_timer_wakeup(noteDuration * 900);
+    esp_light_sleep_start();
 
-    // Wait for the specific duration before playing the next note.
-    delay(noteDuration);
-
-    //stop_speaker();
-    //ledcDetach(HW::kSpeakerPin);
-    
-    // stop the waveform generation before the next note.
-    // noTone(HW::kSpeakerPin);
+    speaker.set(0);
+    esp_sleep_enable_timer_wakeup(noteDuration * 100);
+    esp_light_sleep_start();
   }
-}
-
-void Peripherals::light(uint32_t us) {
-  constexpr const gpio_config_t kConf = {
-    .pin_bit_mask = (1ULL<<HW::kLightPin),
-    .mode = GPIO_MODE_OUTPUT,
-    .pull_up_en = GPIO_PULLUP_DISABLE,
-    .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE,
-  };
-
-  //Configure GPIO with the given settings
-  gpio_config(&kConf);
-
-  gpio_set_level((gpio_num_t)HW::kLightPin, 1);
-  esp_sleep_enable_timer_wakeup(us);
-  esp_light_sleep_start();
-
-  gpio_set_level((gpio_num_t)HW::kLightPin, 0);
 }
