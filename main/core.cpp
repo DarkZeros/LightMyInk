@@ -101,36 +101,51 @@ Core::Core()
     }},
     Item{"Touch"},
     MenuItem{"Test", {
-        ActionItem{"Vib 2x75ms", [](){
-            Peripherals::vibrator(std::vector<int>{75,75,75});
+        ActionItem{"Vib 2x75ms", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::vibrator(std::vector<int>{75,75,75});
+            }));
         }},
-        ActionItem{"Vib 1x75ms", [](){
-            Peripherals::vibrator(std::vector<int>{75});
+        ActionItem{"Vib 1x75ms", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::vibrator(std::vector<int>{75});
+            }));
         }},
-        ActionItem{"Vib 200ms", [](){
-            Peripherals::vibrator(std::vector<int>{200});
+        ActionItem{"Vib 200ms", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::vibrator(std::vector<int>{200});
+            }));
         }},
-        ActionItem{"Scale", [](){
-            Peripherals::speaker(std::vector<std::pair<int,int>>{
-                {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
-                {6400,1000},{10000,1000},{12000,1000}});
+        ActionItem{"Scale", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::speaker(std::vector<std::pair<int,int>>{
+                    {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
+                    {6400,1000},{10000,1000},{12000,1000}});
+            }));
         }},
-        ActionItem{"Beep", [](){
-            Peripherals::speaker(
-                std::vector<std::pair<int,int>>{
-                {3200,100},{0,200},{3200,100}
-            });    
+        ActionItem{"Beep", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::speaker(
+                    std::vector<std::pair<int,int>>{
+                    {3200,100},{0,100},{3200,100}});
+            }));
         }},
-        ActionItem{"Tetris", [](){
-            Peripherals::tetris(); 
+        ActionItem{"Tetris", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::tetris();
+            }));
         }},
     }},
     MenuItem{"Test2", {
-        ActionItem{"Light 1s", [](){
-            Peripherals::light(1'000'000);
+        ActionItem{"Light 1s", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::light(1'000'000);
+            }));
         }},
-        ActionItem{"Light 100s", [](){
-            Peripherals::light(100'000'000);
+        ActionItem{"Light 100s", [&](){
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::light(100'000'000);
+            }));
         }},
     }},
 }}
@@ -175,15 +190,24 @@ void Core::boot() {
     }
 
     // Beep conditions
-    if (kSettings.mClock.mHourlyBeep) {
-        if (mNow.Minute == 0 
-            && wakeup_reason == ESP_SLEEP_WAKEUP_TIMER
-            && mNow.Hour > kSettings.mClock.mHourlyStart
-            && mNow.Hour < kSettings.mClock.mHourlyEnd)
-            Peripherals::speaker(
-                std::vector<std::pair<int,int>>{
-                {3200,100},{0,500},{3200,500}
-            });
+    if (mNow.Minute == 0
+        && wakeup_reason == ESP_SLEEP_WAKEUP_TIMER
+        && mNow.Hour >= kSettings.mClock.mHourlyStart
+        && mNow.Hour <= kSettings.mClock.mHourlyEnd)
+    {
+        if (kSettings.mClock.mHourlyBeep) {
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::speaker(
+                    std::vector<std::pair<int,int>>{
+                    {3200,100},{0,100},{3200,500}
+                });
+            }));
+        }
+        if (kSettings.mClock.mHourlyVib) {
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::vibrator(std::vector<int>{75,75,75});
+            }));
+        }
     }
 
     // Common display preparations, post UI Events processing
@@ -216,7 +240,7 @@ void Core::firstTimeBoot() {
     // Select default voltage 2.6V
     Power::low();
     // HACK: Set a fixed time 
-    struct timeval tv{.tv_sec=1722881000, .tv_usec=0};
+    struct timeval tv{.tv_sec=1723194200, .tv_usec=0};
     // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
