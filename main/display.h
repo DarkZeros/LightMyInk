@@ -10,6 +10,8 @@
 #pragma once
 
 #include <Adafruit_GFX.h>
+#include <future>
+#include <queue>
 
 #include "hardware.h"
 
@@ -35,6 +37,8 @@ public:
   uint8_t buffer[WB_BITMAP * HEIGHT];
 
   static const SPISettings _spi_settings;
+
+  std::queue<std::packaged_task<void(void)>> mTasks;
 
   Display();
 

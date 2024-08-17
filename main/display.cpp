@@ -207,6 +207,11 @@ void Display::refresh(bool partial)
 }
 
 void Display::waitWhileBusy() {
+  // Execute the queued tasks before going to sleep waiting for display
+  for (; !mTasks.empty(); mTasks.pop()) {
+    mTasks.front()();
+  }
+
   esp_sleep_enable_timer_wakeup(10'000'000); // Safe value
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
 
