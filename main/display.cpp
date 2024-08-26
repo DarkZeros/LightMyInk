@@ -211,14 +211,12 @@ void Display::waitWhileBusy() {
   for (; !mTasks.empty(); mTasks.pop()) {
     mTasks.front()();
   }
+  // Tasks might have last so long that display is ready now
+  if (gpio_get_level((gpio_num_t)HW::DisplayPin::Busy) == 0)
+    return;
 
   esp_sleep_enable_timer_wakeup(10'000'000); // Safe value
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
-
-  // Turn OFF the FLASH during this long sleep? Not worth..
-  // esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_OFF); // -0.3ms? -0.5%?
-  // ESP_LOGE("lisghtSleep", "%ld", micros());
-  
   esp_sleep_enable_gpio_wakeup();
   esp_light_sleep_start();
 }
