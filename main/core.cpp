@@ -1,4 +1,3 @@
-
 #include "core.h"
 #include "deep_sleep.h"
 #include "power.h"
@@ -24,10 +23,18 @@ Core::Core()
         UI::DateTime{"DateTime", mTime},
         UI::Menu{"Calibration", {
             UI::Text{[]() -> std::string {
-                return " Error: " + std::to_string(kSettings.mTime.mDrift);
+                return " Drift: " + std::to_string(kSettings.mTime.mDrift);
             }},
             UI::Text{[]() -> std::string {
+                if (kSettings.mTime.mLastSync == 0)
+                    return " No last Sync";
                 return " LastSync: " + std::to_string(kSettings.mTime.mLastSync);
+            }},
+            UI::Action{"Sync", [&](){
+                mTime.calSync();
+            }},
+            UI::Action{"Reset", [&](){
+                mTime.calReset();
             }},
         }},
         UI::Menu{"Hourly", {
@@ -212,10 +219,12 @@ void Core::firstTimeBoot() {
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     // Select default voltage 2.6V
     Power::low();
-    // HACK: Set a fixed time 
+    // HACK: Set a fixed time to start with
     struct timeval tv{.tv_sec=1723194200, .tv_usec=0};
     // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
+    // Set calibration to the ESP32
+    mTime.cal();
 }
 const UI::Any& Core::findUi() {
     // Find current UI element in view by recursively finding deeper elements
