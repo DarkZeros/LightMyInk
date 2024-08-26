@@ -12,19 +12,14 @@ struct Settings {
     bool mTouchWatchDog : 1 {false};
     bool mLeakPinsSet : 1 {false};
 
-    struct Menu {
-        std::array<uint8_t, 4> mState{}; // Up to 4 levels deep (increase if needed)
-        int8_t mDepth {-1};
-    } mUi;
+    struct Hourly {
+        bool mBeep : 1 {false};
+        bool mVib : 1 {false};
+        uint8_t mStart : 5 {0};
+        uint8_t mEnd : 5 {24};
+    } mHourly;
 
-    struct Clock {
-        uint32_t mCalibration{16000000};
-        bool mHourlyBeep : 1 {false};
-        bool mHourlyVib : 1 {false};
-        uint8_t mHourlyStart : 5 {0};
-        uint8_t mHourlyEnd : 5 {24};
-    } mClock;
-
+    UiSettings mUi;
     TimeSettings mTime;
     TouchSettings mTouch;
     BatterySettings mBattery;

@@ -19,130 +19,94 @@ Core::Core()
 , mTouch{kSettings.mTouch}
 , mNow{mTime.getElements()}
 , mUi{
-    MenuItem{"Main Menu", {
-    MenuItem{"Clock", {
-        // CustomItem{"Set Time", 
-        //     [&](bool up) {
-
-        //         mTime.adjustTime((up ? 1 : -1) * 60); 
-        //     }
-        //     [&]() {
-        //         // Advance the selection to next field
-
-        //     }
-        // },
-        MenuItem{"SetTime", {
-            NumberItem{"Hour",
-                [&]() -> int { return mNow.Hour; },
-                [&](bool up){ mTime.adjustTime((up ? 1 : -1) * 3600); }
-            },
-            NumberItem{"Min",
-                [&]() -> int { return mNow.Minute; },
-                [&](bool up){ mTime.adjustTime((up ? 1 : -1) * 60); }
-            },
-            NumberItem{"Sec",
-                [&]() -> int { return mNow.Second; },
-                [&](bool up){ mTime.adjustTime(up ? 1 : -1); }
-            },
+    UI::Menu{"Main Menu", {
+    UI::Menu{"Clock", {
+        UI::DateTime{"DateTime", mTime},
+        UI::Menu{"Calibration", {
+            UI::Text{[]() -> std::string {
+                return " Error: " + std::to_string(kSettings.mTime.mDrift);
+            }},
+            UI::Text{[]() -> std::string {
+                return " LastSync: " + std::to_string(kSettings.mTime.mLastSync);
+            }},
         }},
-        MenuItem{"SetDate", {
-            NumberItem{"Year",
-                [&]() -> int { return 1970 + mNow.Year; },
-                [&](bool up){ /*mTime.adjustTime((up ? 1 : -1) * 3600);*/ }
+        UI::Menu{"Hourly", {
+            UI::Bool{"Beep",
+                [](){return kSettings.mHourly.mBeep; },
+                [](bool val){ kSettings.mHourly.mBeep = val; }
             },
-            NumberItem{"Month",
-                [&]() -> int { return mNow.Month; },
-                [&](bool up){ /*mTime.adjustTime((up ? 1 : -1) * 60);*/ }
+            UI::Bool{"Vibrate",
+                [](){return kSettings.mHourly.mVib; },
+                [](bool val){ kSettings.mHourly.mVib = val; }
             },
-            NumberItem{"Day",
-                [&]() -> int { return mNow.Day; },
-                [&](bool up){ mTime.adjustTime((up ? 1 : -1) * 3600 * 24); }
+            UI::Loop<int>{"St Hour",
+                []() -> int { return kSettings.mHourly.mStart; },
+                [](){ kSettings.mHourly.mStart = (kSettings.mHourly.mStart + 1) % 24; }
             },
-        }},
-        MenuItem{"Calibration", {
-            Item{"NOPE"},
-            // {"Last", TextItem{}},
-            // {"Drift", TextItem{}},
-            /*ActionItem{[](){
-                Peripherals::vibrator(std::vector<int>{75,75,75});}} },*/
-        }},
-        MenuItem{"Hour Notify", {
-            BoolItem{"Beep",
-                [](){return kSettings.mClock.mHourlyBeep; },
-                [](bool val){ kSettings.mClock.mHourlyBeep = val; }
-            },
-            BoolItem{"Vibrate",
-                [](){return kSettings.mClock.mHourlyVib; },
-                [](bool val){ kSettings.mClock.mHourlyVib = val; }
-            },
-            LoopItem{"St Hour",
-                []() -> int { return kSettings.mClock.mHourlyStart; },
-                [](){ kSettings.mClock.mHourlyStart = (kSettings.mClock.mHourlyStart + 1) % 24; }
-            },
-            LoopItem{"End Hour",
-                []() -> int { return kSettings.mClock.mHourlyEnd; },
-                [](){ kSettings.mClock.mHourlyEnd = (kSettings.mClock.mHourlyEnd + 1) % 24; }
+            UI::Loop<int>{"End Hour",
+                []() -> int { return kSettings.mHourly.mEnd; },
+                [](){ kSettings.mHourly.mEnd = (kSettings.mHourly.mEnd + 1) % 24; }
             }
         }},
     }},
-    MenuItem{"Display", {
-        BoolItem{"Invert",
+    UI::Menu{"Display", {
+        UI::Bool{"Invert",
             [](){return kSettings.mDisplay.mInvert; },
             [](bool val){ kSettings.mDisplay.mInvert = val; }
         },
-        BoolItem{"Border",
+        UI::Bool{"Border",
             [](){return kSettings.mDisplay.mDarkBorder; },
             [](bool val){ kSettings.mDisplay.mDarkBorder = val; }
         },
-        LoopItem{"Rotation",
+        UI::Loop<int>{"Rotation",
             []() -> int { return kSettings.mDisplay.mRotation; },
             [](){ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
         },
     }},
-    Item{"Touch"},
-    MenuItem{"Test", {
-        ActionItem{"Vib 2x75ms", [&](){
+    UI::Name{"Touch"},
+    UI::Menu{"Test", {
+        UI::Action{"Vib 2x75ms", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::vibrator(std::vector<int>{75,75,75});
             }));
         }},
-        ActionItem{"Vib 1x75ms", [&](){
+        UI::Action{"Vib 1x75ms", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::vibrator(std::vector<int>{75});
             }));
         }},
-        ActionItem{"Vib 200ms", [&](){
+        UI::Action{"Vib 200ms", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::vibrator(std::vector<int>{200});
             }));
         }},
-        ActionItem{"Scale", [&](){
+        UI::Action{"Scale", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::speaker(std::vector<std::pair<int,int>>{
                     {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
                     {6400,1000},{10000,1000},{12000,1000}});
             }));
         }},
-        ActionItem{"Beep", [&](){
+        UI::Action{"Beep", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::speaker(
                     std::vector<std::pair<int,int>>{
                     {3200,100},{0,100},{3200,100}});
             }));
         }},
-        ActionItem{"Tetris", [&](){
+        UI::Action{"Tetris", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::tetris();
             }));
         }},
     }},
-    MenuItem{"Test2", {
-        ActionItem{"Light 1s", [&](){
+    UI::Menu{"Test2", {
+        UI::Action{"Light 1s", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::light(1'000'000);
             }));
         }},
-        ActionItem{"Light 100s", [&](){
+        UI::Action{"Light 100s", [&](){
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::light(100'000'000);
             }));
@@ -192,10 +156,10 @@ void Core::boot() {
     // Beep conditions
     if (mNow.Minute == 0
         && wakeup_reason == ESP_SLEEP_WAKEUP_TIMER
-        && mNow.Hour >= kSettings.mClock.mHourlyStart
-        && mNow.Hour <= kSettings.mClock.mHourlyEnd)
+        && mNow.Hour >= kSettings.mHourly.mStart
+        && mNow.Hour <= kSettings.mHourly.mEnd)
     {
-        if (kSettings.mClock.mHourlyBeep) {
+        if (kSettings.mHourly.mBeep) {
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::speaker(
                     std::vector<std::pair<int,int>>{
@@ -203,7 +167,7 @@ void Core::boot() {
                 });
             }));
         }
-        if (kSettings.mClock.mHourlyVib) {
+        if (kSettings.mHourly.mVib) {
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
                 Peripherals::vibrator(std::vector<int>{75,75,75});
             }));
@@ -228,7 +192,16 @@ void Core::boot() {
         #undef ARGS
     } else {
         kSettings.mWatchface.mLastDraw.mValid = false;
-        showMenu(findUi(), kSettings.mUi.mState[kSettings.mUi.mDepth]);
+        std::visit([&](auto& e){
+            if constexpr (has_render<decltype(e), Display&>::value) {
+                e.render(mDisplay);
+            } else {
+                mDisplay.setTextSize(3);
+                mDisplay.setTextColor(1, 0);
+                mDisplay.println("UNIMPLEMENTED");
+                mDisplay.println("PRESS BACK");
+            }
+        }, findUi());
     }
 
     deepSleep();
@@ -244,17 +217,14 @@ void Core::firstTimeBoot() {
     // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
 }
-
-const AnyItem& Core::findUi() const {
+const UI::Any& Core::findUi() {
     // Find current UI element in view by recursively finding deeper elements
-    const AnyItem* item = &mUi;
+    const UI::Any* item = &mUi;
     for (auto i=0; i < kSettings.mUi.mDepth; i++) {
-        auto index = kSettings.mUi.mState[i]; 
-        std::visit([&](auto&& e){
-            using T= std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, MenuItem>) {
-                // Menu items return its subelements
-                item = &e.items[index];
+        auto& index = kSettings.mUi.mState[i];
+        std::visit([&](auto& e) {
+            if constexpr (has_sub<decltype(e), uint8_t>::value) {
+                item = &e.sub(index);
             }
         }, *item);
     }
@@ -275,7 +245,7 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
     // Button press on the watchface
     if (ui.mDepth < 0) {
         if (btn == Touch::Light)
-            ; //Todo
+            ; //TODO: Add task to run light while screen update
         else if (btn == Touch::Menu) {
             ui.mDepth = 0;
             // ui.mState[ui.mDepth] = 0; // Do not set it to 0, remember value
@@ -283,63 +253,37 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
         return;
     }
 
-    // Button press on the UI
-    auto item = findUi();
+    // Button press on the UI is sent to the current selected item
+    auto& item = findUi();
 
-    if (btn == Touch::Back) {
-        // A back button always goes back in the depth, all elements
-        ui.mDepth--;
-    } else if (btn == Touch::Menu) {
-        std::visit([&](auto&& e){
-            using T= std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, MenuItem>) {
-                // When we press in a menu, we need to check the type of the current subelement
-                std::visit([&](auto&& sub){
-                    using U= std::decay_t<decltype(sub)>;
-                    if constexpr (std::is_same_v<U, MenuItem>) {
-                        // Another menu, enter it, then sanitize
-                        ui.mDepth++;
-                        ui.mState[ui.mDepth] = std::clamp(ui.mState[ui.mDepth], (uint8_t)0, (uint8_t)(sub.items.size() - 1));
-                    } else if constexpr (std::is_same_v<U, NumberItem>) {
-                        ui.mDepth++;
-                    } else if constexpr (std::is_same_v<U, ActionItem>) {
-                        sub.action();
-                    } else if constexpr (std::is_same_v<U, BoolItem>) {
-                        sub.toggle();
-                    } else if constexpr (std::is_same_v<U, LoopItem>) {
-                        sub.tick();
-                    }
-                }, e.items[ui.mState[ui.mDepth]]);
-            } else {
-                ;
+    // Send the touch event to the UI element to handle it, or fallback
+    std::visit([&](auto& e) {
+        if constexpr (has_button<decltype(e)>::value) {
+            e.button(btn);
+        } else {
+            // If a generic button handler is not implemented, try the specific ones
+            switch (btn) {
+            case Touch::Back: {
+                if constexpr (has_button_back<decltype(e)>::value) {
+                    e.button_back();
+                } else {
+                    // Default option is to go back in the UI
+                    ui.mDepth--;
+                }
+            } break;
+            case Touch::Menu: {
+                if constexpr (has_button_menu<decltype(e)>::value) {
+                    e.button_menu();
+                }
+            } break;
+            default: {
+                if constexpr (has_button_updown<decltype(e), int>::value) {
+                    e.button_updown(btn == Touch::Up ? 1 : -1);
+                }
+            } break;
             }
-        }, item);
-    } else if (btn == Touch::Up) {
-        std::visit([&](auto&& e){
-            using T= std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, MenuItem>) {
-                auto size = e.items.size();
-                ui.mState[ui.mDepth] = (ui.mState[ui.mDepth] + size - 1) % size;
-            } else if constexpr (std::is_same_v<T, NumberItem>) {
-                e.change(true);
-            } else {
-                ;
-            }
-        }, item);
-    } else if (btn == Touch::Down) {
-        std::visit([&](auto&& e){
-            using T= std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, MenuItem>) {
-                auto size = e.items.size();
-                ui.mState[ui.mDepth] = (ui.mState[ui.mDepth] + size + 1) % size;
-            } else if constexpr (std::is_same_v<T, NumberItem>) {
-                e.change(false);
-            } else {
-                ;
-            }
-        }, item);
-    } 
-    // ESP_LOGE("ui", "depth%d st%d", ui.mDepth, ui.mState[ui.mDepth]);
+        }
+    }, item);
 }
 
 /*void Core::NTPSync() {

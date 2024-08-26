@@ -21,9 +21,8 @@ private:
     void firstTimeBoot();
     void deepSleep(); // Set up device for deep sleep
 
-    const AnyItem& findUi() const;
     void handleTouch(const touch_pad_t touch_pad);
-    void showMenu(const AnyItem& item, const uint8_t index);
+    const UI::Any& findUi();
 
     Display mDisplay;
     Time mTime;
@@ -31,5 +30,5 @@ private:
     Touch mTouch;
 
     const tmElements_t& mNow;
-    const AnyItem mUi;
+    const UI::Any mUi;
 };
