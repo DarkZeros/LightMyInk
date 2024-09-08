@@ -103,7 +103,8 @@ struct Speaker {
       .clk_cfg = kClock
     };
     ledc_timer_config(&ledc_timer);
-    ledc_set_duty(kSpeedMode, kChannel, ((1 << ledc_timer.duty_resolution) - 1));
+    uint32_t halfDuty = 1 << (ledc_timer.duty_resolution - 1);
+    ledc_set_duty(kSpeedMode, kChannel, halfDuty);
     ledc_update_duty(kSpeedMode, kChannel);
   }
 
