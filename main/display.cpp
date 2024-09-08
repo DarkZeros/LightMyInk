@@ -101,7 +101,7 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
     _transfer(0b000); // Gate scanning sequence, default 000
     // TODO: Can implement mirror Y feature with this bit 001
 
-    if (kReduceBoosterTime) {
+    if constexpr (kReduceBoosterTime) {
       // SSD1675B controller datasheet
       _transferCommand(0x0C); // BOOSTER_SOFT_START_CONTROL
       // Set the driving strength of GDR for all phases to maximun 0b111 -> 0xF
@@ -112,12 +112,97 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
       _transfer(0x00); // Duration of phases, Default 0xF = 0b00 11 11 (40ms Phase 1/2, 10ms Phase 3)
     }
 
-    if (kFastUpdateTemp) {
+    if constexpr (kFastUpdateTemp) {
       // Write 50ºC fixed temp (fastest update, but less quality)
       _transferCommand(0x1A);
       _transfer(0x32);
       _transfer(0x00);
     }
+
+    // Custom LUT?
+    if (false) {
+      _transferCommand(0x32); /* write LUT register*/
+      constexpr std::array<uint8_t, 20> original{
+        0x02, 0x02, 0x01, 0x11,
+        0x12, 0x12, 0x22, 0x22,
+        0x66, 0x69, 0x69, 0x59,
+        0x58, 0x99, 0x99, 0x88,
+        0x00, 0x00, 0x00, 0x00
+      };
+      _transfer(original.data(), 20);
+    }
+      // /* according to the command table, the lut has 240 bits (=30 bytes * 8 bits) */
+      
+      // /* Waveform part of the LUT (20 bytes) */
+      // /* bit 7/6: 1 - 1 transition */
+      // /* bit 5/4: 1 - 0 transition */
+      // /* bit 3/2: 0 - 1 transition */
+      // /* bit 1/0: 0 - 0 transition */
+      // /* 	00 – VSS */
+      // /* 	01 – VSH */
+      // /* 	10 – VSL */
+      // /* 	11 – NA */
+      
+      // /* original values, L-macro */
+      // U8X8_A(L(0,0,0,2)), // 0x02
+      // U8X8_A(L(0,0,0,2)), // 0x02
+      // U8X8_A(L(0,0,0,1)), // 0x01
+      // U8X8_A(L(0,1,0,1)), // 0x11
+      // U8X8_A(L(0,1,0,2)), // 0x12
+      // U8X8_A(L(0,1,0,2)), // 0x12
+      // U8X8_A(L(0,2,0,2)), // 0x22
+      // U8X8_A(L(0,2,0,2)), // 0x22
+      // U8X8_A(L(1,2,1,2)), // 0x66
+      // U8X8_A(L(1,2,2,1)), // 0x69
+      // U8X8_A(L(1,2,2,1)), // 0x69
+      // U8X8_A(L(1,1,2,1)), // 0x59
+      // U8X8_A(L(1,1,2,0)), // 0x58
+      // U8X8_A(L(2,1,2,1)), // 0x99
+      // U8X8_A(L(2,1,2,1)), // 0x99
+      // U8X8_A(L(2,0,2,0)), // 0x88
+      // U8X8_A(L(0,0,0,0)), // 0x00
+      // U8X8_A(L(0,0,0,0)), // 0x00
+      // U8X8_A(L(0,0,0,0)), // 0x00
+      // U8X8_A(L(0,0,0,0)), // 0x00
+
+
+      // /* orginal values without 0-0 and 1-1 transition */
+      // /*
+      // U8X8_A(L(3,0,0,3)), // 0x02
+      // U8X8_A(L(3,0,0,3)), // 0x02
+      // U8X8_A(L(3,0,0,3)), // 0x01
+      // U8X8_A(L(3,1,0,3)), // 0x11
+      // U8X8_A(L(3,1,0,3)), // 0x12
+      // U8X8_A(L(3,1,0,3)), // 0x12
+      // U8X8_A(L(3,2,0,3)), // 0x22
+      // U8X8_A(L(3,2,0,3)), // 0x22
+      // U8X8_A(L(3,2,1,3)), // 0x66
+      // U8X8_A(L(3,2,2,3)), // 0x69
+      // U8X8_A(L(3,2,2,3)), // 0x69
+      // U8X8_A(L(3,1,2,3)), // 0x59
+      // U8X8_A(L(3,1,2,3)), // 0x58
+      // U8X8_A(L(3,1,2,3)), // 0x99
+      // U8X8_A(L(3,1,2,3)), // 0x99
+      // U8X8_A(L(3,0,2,3)), // 0x88
+      // U8X8_A(L(3,0,0,3)), // 0x00
+      // U8X8_A(L(3,0,0,3)), // 0x00
+      // U8X8_A(L(3,0,0,3)), // 0x00
+      // U8X8_A(L(3,0,0,3)), // 0x00
+      // */
+      
+      
+      // /* Timing part of the LUT, 20 Phases with 4 bit each: 10 bytes */
+      // U8X8_A(0xF8),
+      // U8X8_A(0xB4),
+      // U8X8_A(0x13),
+      // U8X8_A(0x51),
+      // U8X8_A(0x35),
+      // U8X8_A(0x51),
+      // U8X8_A(0x51),
+      // U8X8_A(0x19),
+      // U8X8_A(0x01),
+      // U8X8_A(0x00),
+
 
     // setRamAdressMode
     _transferCommand(0x11); // set ram entry mode
