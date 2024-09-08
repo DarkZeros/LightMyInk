@@ -123,15 +123,6 @@ namespace uSpi {
     transfer(ptr, ((uint16_t)h) * w / 8);
   }
 
-  void RTC_IRAM_ATTR dMicroseconds(uint32_t us) {
-    const auto m = esp_cpu_get_cycle_count();
-    const auto ticks = esp_rom_get_cpu_ticks_per_us();
-    const auto e = (m + us * ticks);
-    while (esp_cpu_get_cycle_count() < e) {
-      asm volatile("nop");
-    }
-  }
-
   void RTC_IRAM_ATTR refresh() {
     // Set partial mode ? It should be already set
     // command(0x22);

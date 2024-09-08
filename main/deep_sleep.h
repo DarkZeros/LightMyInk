@@ -4,14 +4,15 @@
 constexpr static int fixedDisplayUpdateMargin = 241'000; // GoodDisplay value, we chose this, if it is wrong will correct
 
 struct DeepSleepState {
-  uint32_t updateWait{fixedDisplayUpdateMargin};
+  uint32_t updateWait {fixedDisplayUpdateMargin};
+  // uint64_t sleepTicks {0};
 
-  uint8_t currentMinutes{0};
+  // Display minute update variables
+  uint8_t currentMinutes {0};
   uint8_t stepSize {1};
   int8_t minutes {10};
-
-  bool displayBusy {false};
   bool redrawDec {false};
+  bool displayBusy {false};
 };
 
 extern struct DeepSleepState kDSState;

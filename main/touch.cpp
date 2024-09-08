@@ -18,8 +18,8 @@ void Touch::setUp(bool onlyMenuLight) {
   esp_sleep_enable_touchpad_wakeup();
   //touch_pad_denoise_disable();
   touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Menu]], mSettings.mThreshold);
+  touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Light]], mSettings.mThreshold);
   if (!onlyMenuLight) {
-    touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Light]], mSettings.mThreshold);
     touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Down]], mSettings.mThreshold);
     touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Up]], mSettings.mThreshold);
   }
@@ -28,7 +28,7 @@ void Touch::setUp(bool onlyMenuLight) {
   
   uint16_t mask =
     (1 << HW::Touch::Num[mSettings.mMap[Touch::Menu]])
-    |(!onlyMenuLight << HW::Touch::Num[mSettings.mMap[Touch::Light]])
+    |(1 << HW::Touch::Num[mSettings.mMap[Touch::Light]])
     |(!onlyMenuLight << HW::Touch::Num[mSettings.mMap[Touch::Down]])
     |(!onlyMenuLight << HW::Touch::Num[mSettings.mMap[Touch::Up]]);
 

@@ -7,31 +7,18 @@
 #include <inttypes.h>
 #include "esp_sleep.h"
 #include "esp_cpu.h"
+#include "rom/ets_sys.h"
+#include "rom/gpio.h"
 #include "esp_rom_sys.h"
 #include "esp_wake_stub.h"
 #include "sdkconfig.h"
 
-#include "rom/gpio.h"
+// For touch detection and Light on/off
+#include "hal/touch_sensor_ll.h"
+// For WDT feeding
+#include "hal/wdt_hal.h"
 
 #include "hardware.h"
-
-/*
- * Deep sleep wake stub function is a piece of code that will be loaded into 'RTC Fast Memory'.
- * The first way is to use the RTC_IRAM_ATTR attribute to place a function into RTC memory,
- * The second way is to place the function into any source file whose name starts with rtc_wake_stub.
- * Files names rtc_wake_stub* have their contents automatically put into RTC memory by the linker.
- *
- * First, call esp_set_deep_sleep_wake_stub to set the wake stub function as the RTC stub entry,
- * The wake stub function runs immediately as soon as the chip wakes up - before any normal
- * initialisation, bootloader, or ESP-IDF code has run. After the wake stub runs, the SoC
- * can go back to sleep or continue to start ESP-IDF normally.
- *
- * Wake stub code must be carefully written, there are some rules for wake stub:
- * 1) The wake stub code can only access data loaded in RTC memory.
- * 2) The wake stub code can only call functions implemented in ROM or loaded into RTC Fast Memory.
- * 3) RTC memory must include any read-only data (.rodata) used by the wake stub.
- */
-
 #include "uspi.h"
 #include "deep_sleep.h"
 
@@ -43,9 +30,32 @@ void RTC_IRAM_ATTR turnOffGpio() {
     GPIO_DIS_OUTPUT(pin);
 }
 
+void RTC_IRAM_ATTR feed_wdt() {
+  // More than 500ms it is better to reset the MWDT0
+  TIMERG0.wdtwprotect.wdt_wkey = TIMG_WDT_WKEY_VALUE;
+  TIMERG0.wdtfeed.wdt_feed = 1;
+  TIMERG0.wdtwprotect.wdt_wkey = 0;
+}
+
+void RTC_IRAM_ATTR microSleep(uint32_t micros) {
+  constexpr auto step = 400'000;
+  feed_wdt();
+  while (micros > step) {
+    micros -= step;
+    esp_rom_delay_us(step);
+    feed_wdt();
+  }
+  esp_rom_delay_us(micros);
+  feed_wdt();
+}
+
 // wake up stub function stored in RTC memory
 void RTC_IRAM_ATTR wake_stub_example(void)
 {
+  // This sets up the delay to work properly
+  ets_update_cpu_frequency_rom(ets_get_detected_xtal_freq() / 1'000'000);
+
+  // If we were waiting for a display finish, we need to complete it first
   if (kDSState.displayBusy) {
     kDSState.displayBusy = false;
 
@@ -81,21 +91,40 @@ void RTC_IRAM_ATTR wake_stub_example(void)
     // Guess the amount to sleep until next one and advance counters
     kDSState.currentMinutes += kDSState.stepSize;
     kDSState.minutes -= kDSState.stepSize;
-    if (kDSState.minutes >= 0)
-      esp_wake_stub_set_wakeup_time(kDSState.stepSize * 60'000'000 - kDSState.updateWait);
-    else
-      esp_wake_stub_set_wakeup_time((kDSState.stepSize + kDSState.minutes) * 60'000'000 - kDSState.updateWait);
+    auto minutes = kDSState.stepSize + (kDSState.minutes < 0 ? kDSState.minutes : 0);
+    esp_wake_stub_set_wakeup_time(minutes * 60'000'000 - kDSState.updateWait);
 
     // Set stub entry, then going to deep sleep again.
     esp_wake_stub_sleep(&wake_stub_example);
-    esp_deep_sleep_start();
+  }
+
+  // Light on press button?
+  // 8 for timer // 256 for touch
+  if (esp_wake_stub_get_wakeup_cause() == 256) {
+    uint32_t mask;
+    touch_ll_read_trigger_status_mask(&mask);
+
+    // 4 = MENU, 32 = BACK/LIGHT, 64 = DOWN, 1 = UP
+    if (mask == 32){
+      touch_ll_clear_trigger_status_mask(); // This will consume the touch
+
+      GPIO_INPUT_DISABLE(25);
+      GPIO_OUTPUT_SET(HW::kLightPin, 1);
+      microSleep(2'000'000); // 2secs fixed
+      GPIO_OUTPUT_SET(HW::kLightPin, 0);
+
+      // Go back to sleep
+      esp_wake_stub_sleep(&wake_stub_example);
+    }
+    // Wake up, touch needs to handle by the Main code
+    esp_default_wake_deep_sleep();
+    return;
   }
 
   // Check if we should just do normal wakeup
-  // If it is not a timer wakeup, return to handle on the full mode
+  // If it is not a timer wakeup, return to handle on the Main code
+  // 8 for timer // 256 for touch
   if (esp_wake_stub_get_wakeup_cause() != 8 || kDSState.minutes <= 0) {
-    // kDSState.wakeCause = esp_wake_stub_get_wakeup_cause();
-    // 8 for timer // 256 for touch
     esp_default_wake_deep_sleep();
     return;
   }
@@ -103,7 +132,7 @@ void RTC_IRAM_ATTR wake_stub_example(void)
   // Reset display to wake it up
   GPIO_INPUT_DISABLE(9); // TODO: Make it using the variable HW::DisplayPin::Res
   GPIO_OUTPUT_SET(HW::DisplayPin::Res, 0);
-  uSpi::dMicroseconds(1000);
+  esp_rom_delay_us(1'000);
   GPIO_OUTPUT_SET(HW::DisplayPin::Res, 1);
 
   // Calculate the areas to update based on time and watchface states
@@ -131,15 +160,9 @@ void RTC_IRAM_ATTR wake_stub_example(void)
   turnOffGpio();
   kDSState.displayBusy = true;
 
-  // Set to wake up again when the Display has finished
-  // THIS DOES NOT WORK, WHY?? I had to implement a hardcoded sleep
-  // gpio_pin_wakeup_enable(HW::DisplayPin::Busy, GPIO_PIN_INTR_LOLEVEL);
-  // esp_sleep_enable_gpio_wakeup();
-
-  // Set wakeup timer when we guess display will finish refreshing, to put it to sleep
+  // Set wakeup timer when we guess display will finish refreshing, to put display to hibernation
   esp_wake_stub_set_wakeup_time(kDSState.updateWait);
 
   // Set stub entry, then going to deep sleep again.
   esp_wake_stub_sleep(&wake_stub_example);
-  esp_deep_sleep_start();
 }
