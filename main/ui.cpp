@@ -81,13 +81,13 @@ void Number::render(Display& mDisplay) const {
 }
 
 namespace {
-    std::array<std::tuple<const char *, const char *, int, int>, 6> kDateTime = {{
-        {" ", "%02d", 2, 0},
-        {":", "%02d", 1, 0},
-        {":", "%02d", 0, 0},
-        {"\n\n", "%02d", 4, 0},
-        {"/", "%02d", 5, 0},
-        {"/", "%04d", 6, 1970},
+    std::array<std::tuple<const char *, const char *, int, int, int>, 6> kDateTime = {{
+        {" ", "%02d", 2, 0, 23},
+        {":", "%02d", 1, 0, 59},
+        {":", "%02d", 0, 0, 59},
+        {"\n\n", "%02d", 4, 0, 28},
+        {"/", "%02d", 5, 0, 12},
+        {"/", "%04d", 6, 1970, 255},
     }};
 }
 
@@ -99,7 +99,11 @@ void DateTime::button_updown(int v) const{
     auto selected = ind(kDateTime.size());
     auto cur = mTime.getElements();
     auto curCast = reinterpret_cast<uint8_t *>(&cur);
-    curCast[std::get<2>(kDateTime[selected])] += v;
+    auto& val = curCast[std::get<2>(kDateTime[selected])];
+    if (val == 0 && v == -1)
+        val = std::get<4>(kDateTime[selected]);
+    else
+        val += v;
     mTime.setTime(makeTime(cur));
 }
 void DateTime::render(Display& mDisplay) const {
@@ -112,7 +116,7 @@ void DateTime::render(Display& mDisplay) const {
     auto timeCast = reinterpret_cast<uint8_t *>(&time);
 
     for (auto i=0; i<kDateTime.size(); i++) {
-        auto& [pre, mid, ind, add] = kDateTime[i];
+        auto& [pre, mid, ind, add, _] = kDateTime[i];
         mDisplay.print(pre);
         if (i == selected) {
             mDisplay.setTextColor(0, 1);
