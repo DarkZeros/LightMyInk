@@ -10,7 +10,7 @@ void Watchface::updateCache() {
   auto fillCache = [&](Rect& r, uint8_t* data, bool units, size_t len){
     // Render all the cache elements, the spacing of elements is given by the Rect
     r = units ? rectU() : rectD();
-    mDisplay.getAlignedRegion(r.x, r.y, r.w, r.h);
+    mDisplay.alignRect(r);
     auto size = r.size();
     for (auto d=0; d<len; d++) {
       units ? drawU(d) : drawD(d);
@@ -44,7 +44,7 @@ void Watchface::draw() {
   const auto needUpdateU = !last.mValid || last.mMinuteU[0] != mNow.Minute % 10;
 
   auto copyCache2Display = [&](auto&& ptr, const Rect& r) {
-    mDisplay.writeRegionAlignedPacked(ptr, r.x, r.y, r.w, r.h);
+    mDisplay.writeAlignedRectPacked(ptr, r);
   };
   auto copyCache2Buffer = [&](auto&& ptr, const Rect& r) {
     for (auto y=0; y<r.h; y++)
@@ -80,7 +80,7 @@ void Watchface::draw() {
 
   // Convert to aligned rotated coords, makes easier the copy
   for (auto& c : composables)      
-    mDisplay.getAlignedRegion(c.x, c.y, c.w, c.h);
+    mDisplay.alignRect(c);
 
   // Update display / refresh
   if (!last.mValid){
@@ -91,7 +91,7 @@ void Watchface::draw() {
   } else {
     // Pass 1: Copy all to display
     for (const auto& c : composables)      
-      copyAlignedRectToDisplay(c);
+      mDisplay.writeAlignedRect(c);
     copyMinutesD();
     copyMinutesU();
 
@@ -100,7 +100,7 @@ void Watchface::draw() {
 
     // Pass 3, copy again the updated parts to the front framebuffer
     for (const auto& c : composables)      
-      copyAlignedRectToDisplay(c);
+      mDisplay.writeAlignedRect(c);
     copyMinutesD();
     // Do not copy the minutes to frontbuffer, since we will likely
     // change it next update, saving a few 300 * 8 * 0.05us = >106us = 200us;

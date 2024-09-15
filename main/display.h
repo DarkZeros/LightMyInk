@@ -16,10 +16,15 @@
 #include "hardware.h"
 
 struct DisplaySettings {
-    // Settings that can be changed
-    bool mInvert : 1 {false};
-    bool mDarkBorder : 1 {false};
-    uint8_t mRotation : 2 {2};
+  // Settings that can be changed
+  bool mInvert : 1 {false};
+  bool mDarkBorder : 1 {false};
+  uint8_t mRotation : 2 {2};
+};
+
+struct Rect {
+  uint8_t x, y, w, h;
+  uint16_t size() const {return static_cast<uint16_t>(w)/8 * h; };
 };
 
 class Display : public Adafruit_GFX {
@@ -42,8 +47,8 @@ public:
 
   Display();
 
-  void rotate(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const;
-  void getAlignedRegion(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const;
+  void rotate(Rect& rect) const;
+  void alignRect(Rect& rect) const;
 
   // Heavily optimize this please
   void drawPixel(int16_t x, int16_t y, uint16_t color) override;
@@ -64,15 +69,15 @@ public:
   void refresh(bool partial = true);
   void hibernate();
   void waitWhileBusy();
-  void writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h);
-  void writeRegionAligned(uint8_t x, uint8_t y, uint8_t w, uint8_t h);
-  void writeRegionAlignedPacked(const uint8_t* ptr, uint8_t x, uint8_t y, uint8_t w, uint8_t h);
+  void writeRect(Rect rect);
+  void writeAlignedRect(const Rect& rect);
+  void writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect);
   void writeAll(bool backBuffer = false);
   void writeAllAndRefresh(bool partial = true);
 
 private:
   // Called internally in middle of transfer
-  void _setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h);
+  void _setRamArea(const Rect& rect);
   void _setRefreshMode(bool partial);
 
   // SPI transfer methods

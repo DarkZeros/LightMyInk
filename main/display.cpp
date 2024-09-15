@@ -132,14 +132,15 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   }
 }
 
-void Display::_setRamArea(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
+void Display::_setRamArea(const Rect& rect){
+  auto& [x, y, w, h] = rect;
   _transferCommand(0x44);  // X start & end positions (Byte)
   _transfer(x / 8);
   _transfer((x + w - 1) / 8);
   _transferCommand(0x45); // Y start & end positions (Line)
   _transfer(y);
   _transfer(0);
-  _transfer((y + h - 1));
+  _transfer(y + h - 1);
   //_transfer(0); // No need to write this, default is 0
   _transferCommand(0x4e); // X start counter
   _transfer(x / 8);
@@ -242,8 +243,9 @@ void Display::setInverted(bool inverted) {
   kState.inverted = inverted;
 }
 
-void Display::rotate(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const
+void Display::rotate(Rect& rect) const
 {
+  auto& [x, y, w, h] = rect;
   switch (getRotation())
   {
     case 1:
@@ -263,9 +265,10 @@ void Display::rotate(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const
   }
 }
 
-void Display::getAlignedRegion(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) const
+void Display::alignRect(Rect& rect) const
 {
-  rotate(x, y, w, h);
+  rotate(rect);
+  auto& [x, y, w, h] = rect;
 
   // Align
   x -= x % 8; // byte boundary
@@ -278,34 +281,34 @@ void Display::getAlignedRegion(uint8_t& x, uint8_t& y, uint8_t& w, uint8_t& h) c
   h = y + h < HEIGHT ? h : HEIGHT - y; // limit
 }
 
-void Display::writeRegionAligned(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+void Display::writeAlignedRect(const Rect& rect)
 {
   _startTransfer();
-  _setRamArea(x, y, w, h);
+  _setRamArea(rect);
   _transferCommand(0x24);
-  auto xst = x / 8;
-  for (auto i = 0; i < h; i++)
+  auto xst = rect.x / 8;
+  for (auto i = 0; i < rect.h; i++)
   {
-    auto yoffset = (y + i) * WB_BITMAP;
-    SPI.writeBytes(buffer + xst + yoffset, w / 8);
+    auto yoffset = (rect.y + i) * WB_BITMAP;
+    SPI.writeBytes(buffer + xst + yoffset, rect.w / 8);
   }
   _endTransfer();
 }
 
-void Display::writeRegionAlignedPacked(const uint8_t* ptr, uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+void Display::writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect)
 {
   _startTransfer();
-  _setRamArea(x, y, w, h);
+  _setRamArea(rect);
   // ESP_LOGE("area","%p, %d %d %d %d, size %d", ptr, x, y, w, h, ((uint16_t)h) * w / 8);
   _transferCommand(0x24);
-  SPI.writeBytes(ptr, ((uint16_t)h) * w / 8);
+  SPI.writeBytes(ptr, ((uint16_t)rect.h) * rect.w / 8);
   _endTransfer();
 }
 
-void Display::writeRegion(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+void Display::writeRect(Rect rect)
 {
-  getAlignedRegion(x, y, w, h);
-  writeRegionAligned(x, y, w, h);
+  alignRect(rect);
+  writeAlignedRect(rect);
 }
 
 void Display::writeAllAndRefresh(bool partial)
@@ -321,7 +324,7 @@ void Display::writeAllAndRefresh(bool partial)
 void Display::writeAll(bool backbuffer)
 {
   _startTransfer();
-  _setRamArea(0, 0, WIDTH, HEIGHT);
+  _setRamArea({0, 0, WIDTH, HEIGHT});
   _transferCommand(backbuffer ? 0x26 : 0x24);
   SPI.writeBytes(buffer, sizeof(buffer));
   _endTransfer();

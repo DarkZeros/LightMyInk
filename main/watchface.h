@@ -5,11 +5,6 @@
 #include <TimeLib.h>
 #include "ui.h"
 
-struct Rect {
-    uint8_t x, y, w, h;
-    uint16_t size() const {return w/8 * h; };
-};
-
 struct WatchfaceSettings {
     uint8_t mType : 2 {0}; // Watchface type selected from the presets
 
@@ -80,13 +75,4 @@ public:
 
     void draw();
     void updateCache();
-
-    void copyRectToDisplay(const Rect& rect) {
-      auto& [x, y, w, h] = rect;
-      mDisplay.writeRegion(x, y, w, h);
-    };
-    void copyAlignedRectToDisplay(const Rect& rect) {
-      auto& [x, y, w, h] = rect;
-      mDisplay.writeRegionAligned(x, y, w, h);
-    };
 };
