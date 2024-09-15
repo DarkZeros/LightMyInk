@@ -7,17 +7,28 @@ namespace {
     void updownUiState(int add, int size) {
         ui.mState[ui.mDepth] = (ui.mState[ui.mDepth] + size + add) % size;
     }
-    int ind(std::size_t size) {
+    int curIndex(std::size_t size) {
         return (ui.mState[ui.mDepth] + size) % size;
+    }
+    Rect getTextBounds(Display& displ, const char * str) {
+        int16_t x, y;
+        uint16_t w, h;
+        displ.getTextBounds(str, 0, 0, &x, &y, &w, &h);
+        return {static_cast<uint8_t>(x), static_cast<uint8_t>(y),
+                static_cast<uint8_t>(w), static_cast<uint8_t>(h)};
     }
     void renderHeader(Display& mDisplay, const std::string& name) {
         // Text size for all the Menu
-        mDisplay.setTextSize(3);
+        mDisplay.setTextSize(2);
 
         // Print the menu title on top, centered
         mDisplay.setTextColor(1, 0);
-        mDisplay.print(" "); // TODO: Center properly
+        auto r = getTextBounds(mDisplay, name.c_str());
+        mDisplay.setCursor((mDisplay.WIDTH - r.w) / 2, mDisplay.getCursorY());
         mDisplay.println(name.c_str());
+        // Underscore the title then leave a gap
+        mDisplay.drawFastHLine((mDisplay.WIDTH - r.w) / 2, mDisplay.getCursorY(), r.w, 1);
+        mDisplay.setCursor(mDisplay.getCursorX(), mDisplay.getCursorY() + 5);
     }
 }
 
@@ -42,7 +53,7 @@ void Sub::button_updown(int b) const {
 }
 
 int Sub::index() const {
-    return ind(items.size());
+    return curIndex(items.size());
 }
 
 void Menu::render(Display& mDisplay) const {
@@ -96,7 +107,7 @@ void DateTime::button_menu() const{
 }
 void DateTime::button_updown(int v) const{
     //Take current selected item up/down
-    auto selected = ind(kDateTime.size());
+    auto selected = curIndex(kDateTime.size());
     auto cur = mTime.getElements();
     auto curCast = reinterpret_cast<uint8_t *>(&cur);
     auto& val = curCast[std::get<2>(kDateTime[selected])];
@@ -111,7 +122,7 @@ void DateTime::render(Display& mDisplay) const {
 
     mDisplay.println();
 
-    auto selected = ind(kDateTime.size());
+    auto selected = curIndex(kDateTime.size());
     auto time = mTime.getElements();
     auto timeCast = reinterpret_cast<uint8_t *>(&time);
 
