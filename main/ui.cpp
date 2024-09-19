@@ -10,24 +10,18 @@ namespace {
     int curIndex(std::size_t size) {
         return (ui.mState[ui.mDepth] + size) % size;
     }
-    Rect getTextBounds(Display& displ, const char * str) {
-        int16_t x, y;
-        uint16_t w, h;
-        displ.getTextBounds(str, 0, 0, &x, &y, &w, &h);
-        return {static_cast<uint8_t>(x), static_cast<uint8_t>(y),
-                static_cast<uint8_t>(w), static_cast<uint8_t>(h)};
-    }
-    void renderHeader(Display& mDisplay, const std::string& name) {
+
+    void renderHeader(Display& mDisplay, const std::string& name, size_t size = 2) {
         // Text size for all the Menu
-        mDisplay.setTextSize(2);
+        mDisplay.setTextSize(size);
 
         // Print the menu title on top, centered
         mDisplay.setTextColor(1, 0);
-        auto r = getTextBounds(mDisplay, name.c_str());
-        mDisplay.setCursor((mDisplay.WIDTH - r.w) / 2, mDisplay.getCursorY());
+        auto w = mDisplay.getTextRect(name.c_str()).w;
+        mDisplay.setCursor((mDisplay.WIDTH - w) / 2, mDisplay.getCursorY());
         mDisplay.println(name.c_str());
         // Underscore the title then leave a gap
-        mDisplay.drawFastHLine((mDisplay.WIDTH - r.w) / 2, mDisplay.getCursorY(), r.w, 1);
+        mDisplay.drawFastHLine((mDisplay.WIDTH - w) / 2, mDisplay.getCursorY(), w, 1);
         mDisplay.setCursor(mDisplay.getCursorX(), mDisplay.getCursorY() + 5);
     }
 }

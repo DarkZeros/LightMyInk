@@ -427,6 +427,13 @@ void Display::hibernate()
     SPI.beginTransaction(_spi_settings);
 }
 
+Rect Display::getTextRect(const char * str, int16_t xc, int16_t yc) {
+  int16_t x, y;
+  uint16_t w, h;
+  getTextBounds(str, xc < 0 ? cursor_x : xc, yc < 0 ? cursor_y : yc, &x, &y, &w, &h);
+  return {static_cast<uint8_t>(x), static_cast<uint8_t>(y),
+          static_cast<uint8_t>(w), static_cast<uint8_t>(h)};
+}
 
 void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
 {
