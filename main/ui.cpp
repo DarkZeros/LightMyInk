@@ -86,25 +86,25 @@ void Number::render(Display& mDisplay) const {
 }
 
 namespace {
-    std::array<std::tuple<const char *, const char *, int, int, int>, 6> kDateTime = {{
-        {" ", "%02d", 2, 0, 23},
-        {":", "%02d", 1, 0, 59},
-        {":", "%02d", 0, 0, 59},
-        {"\n\n", "%02d", 4, 0, 28},
-        {"/", "%02d", 5, 0, 12},
-        {"/", "%04d", 6, 1970, 255},
+    std::array<std::tuple<bool, const char *, const char *, int, int, int, const char *>, 6> kDateTime = {{
+        {true, " ", "%02d", 2, 0, 23, ""},
+        {false, ":", "%02d", 1, 0, 59, ""},
+        {false, ":", "%02d", 0, 0, 59, "\n\n\n"},
+        {true, "", "%02d", 4, 0, 28, ""},
+        {false, "/", "%02d", 5, 0, 12, ""},
+        {false, "/", "%04d", 6, 1970, 255, "\n\n\n"},
     }};
 }
 
 void DateTime::button_menu() const{
-    updownUiState(1, 6);
+    updownUiState(1, kDateTime.size());
 }
 void DateTime::button_updown(int v) const{
     //Take current selected item up/down
     auto selected = curIndex(kDateTime.size());
     auto cur = mTime.getElements();
     auto curCast = reinterpret_cast<uint8_t *>(&cur);
-    auto& val = curCast[std::get<2>(kDateTime[selected])];
+    auto& val = curCast[std::get<3>(kDateTime[selected])];
     if (val == 0 && v == -1)
         val = std::get<4>(kDateTime[selected]);
     else
@@ -116,19 +116,47 @@ void DateTime::render(Display& mDisplay) const {
 
     mDisplay.println();
 
+    // Fixed width size
+    auto w = mDisplay.getTextRect("00/00/0000").w;
+
     auto selected = curIndex(kDateTime.size());
     auto time = mTime.getElements();
-    auto timeCast = reinterpret_cast<uint8_t *>(&time);
+    auto timeCast = reinterpret_cast<uint8_t*>(&time);
+
+    mDisplay.print("\n");
 
     for (auto i=0; i<kDateTime.size(); i++) {
-        auto& [pre, mid, ind, add, _] = kDateTime[i];
+        auto& [center, pre, mid, ind, add, _, end] = kDateTime[i];
+        if (center)
+            mDisplay.setCursor((mDisplay.WIDTH - w) / 2, mDisplay.getCursorY());
         mDisplay.print(pre);
+        char text[6];
+        snprintf(text, sizeof(text), mid, timeCast[ind] + add);
+        auto textSize = strlen(text);
         if (i == selected) {
+            // Draw /\ and \/
+            auto x = mDisplay.getCursorX(), y = mDisplay.getCursorY();
+            mDisplay.setCursor(x, y - 2 * 8);
+            if (textSize == 4)
+                mDisplay.print(" ");
+            mDisplay.print("/\\");
+            mDisplay.setCursor(x, y + 2 * 8);
+            if (textSize == 4)
+                mDisplay.print(" ");
+            mDisplay.print("\\/");
+            mDisplay.setCursor(x, y);
             mDisplay.setTextColor(0, 1);
         }
-        mDisplay.printf(mid, timeCast[ind] + add);
+        mDisplay.printf(text);
         mDisplay.setTextColor(1, 0);
+        mDisplay.printf(end);
     }
+
+    // Day of the week
+    auto weekday = dayStr(timeCast[3]);
+    auto w_dayofWeek = mDisplay.getTextRect(weekday).w;
+    mDisplay.setCursor((mDisplay.WIDTH - w_dayofWeek) / 2, mDisplay.getCursorY());
+    mDisplay.printf(weekday);
 
     mDisplay.writeAllAndRefresh(); 
 }
