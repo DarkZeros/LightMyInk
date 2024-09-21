@@ -266,14 +266,14 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
     auto& item = findUi();
 
     // Send the touch event to the UI element to handle it, or fallback
-    std::visit([&](auto& e) {
-        if constexpr (has_button<decltype(e)>::value) {
+    std::visit([&]<typename E>(const E& e) {
+        if constexpr (has_button<E>::value) {
             e.button(btn);
         } else {
             // If a generic button handler is not implemented, try the specific ones
             switch (btn) {
             case Touch::Back: {
-                if constexpr (has_button_back<decltype(e)>::value) {
+                if constexpr (has_button_back<E>::value) {
                     e.button_back();
                 } else {
                     // Default option is to go back in the UI
@@ -281,12 +281,12 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
                 }
             } break;
             case Touch::Menu: {
-                if constexpr (has_button_menu<decltype(e)>::value) {
+                if constexpr (has_button_menu<E>::value) {
                     e.button_menu();
                 }
             } break;
             default: {
-                if constexpr (has_button_updown<decltype(e), int>::value) {
+                if constexpr (has_button_updown<E, int>::value) {
                     e.button_updown(btn == Touch::Up ? 1 : -1);
                 }
             } break;
