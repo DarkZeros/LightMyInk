@@ -3,6 +3,8 @@
 #include "esp32-hal-log.h"
 #include "esp_private/esp_clk.h"
 
+#include <algorithm>
+
 void Time::readTime() {
     gettimeofday(&mTv, NULL);
     // TODO: Apply timezone correction manually, since IDF does not handle it
@@ -34,37 +36,41 @@ void Time::setTime(const time_t& seconds) {
 void Time::setTime(const timeval& tm) {
     gettimeofday(&mTv, NULL); // redundant? Maybe 2ms drift?
     // Store difference in drift
-    mSettings.mDrift += tm.tv_sec - mTv.tv_sec;
+    if (mSettings.mSync) {
+        mSettings.mSync->mDrift.tv_sec += tm.tv_sec - mTv.tv_sec;
+    }
     // Set it and update times
     settimeofday(&tm, NULL);
     readTime();
 }
 
-void Time::cal() {
+void Time::calSet() {
     esp_clk_slowclk_cal_set(mSettings.mCalibration);
 }
-void Time::calSync() {
-    // newCal = cal * -drift / elapsed;
-    if (mSettings.mLastSync == 0) {
-        calReset();
+void Time::calUpdate() {
+    if (!mSettings.mSync) {
+        mSettings.mSync.emplace(mTv, timeval{});
         return;
     }
-    const auto elapsed = mTv.tv_sec - mSettings.mLastSync;
-    ESP_LOGE("old", "elapsed %lld cal %ld drift%ld", elapsed, mSettings.mCalibration, mSettings.mDrift);
+    auto& sync = *mSettings.mSync;
+    auto& time = sync.mTime;
+    double elapsed = (mTv.tv_sec - time.tv_sec) + (mTv.tv_usec - time.tv_usec) * 0.000'001;
+    double drift = sync.mDrift.tv_sec + sync.mDrift.tv_usec * 0.000'001;
+    uint32_t cal = 1.0 * mSettings.mCalibration * elapsed / (elapsed - drift);
 
-    double newCal = 1.0 * mSettings.mCalibration * (elapsed) / (elapsed - mSettings.mDrift);
-    mSettings.mCalibration = newCal;
-    // Calculate error and add it to drift
-    double error = newCal - mSettings.mCalibration;
-    // Keep in the drift what could not be accounted for
-    mSettings.mDrift = static_cast<uint32_t>(error * elapsed / mSettings.mCalibration);
-    cal();
+    // ESP_LOGE("cal", "drift %f elapsed %f, cal %lu", drift, elapsed, cal);
+    // Update drift, time and calibration
+    drift -= (1.f * cal - mSettings.mCalibration) / mSettings.mCalibration * (elapsed - drift);
+    sync.mDrift.tv_sec = drift;
+    drift -= sync.mDrift.tv_sec;
+    sync.mDrift.tv_usec = drift * 1'000'000;
+    // time = mTv; // Do not change time, carry over from the start
+    mSettings.mCalibration = std::clamp(cal, kDefaultCalibration / 10, kDefaultCalibration * 10);
 
-    ESP_LOGE("cal", "elapsed %lld cal %ld newCal %f error%f newDrift%ld", elapsed, mSettings.mCalibration, newCal, error, mSettings.mDrift);
+    calSet();
 }
 void Time::calReset() {
-    mSettings.mLastSync = mTv.tv_sec;
-    mSettings.mDrift = 0;
-    mSettings.mCalibration = mSettings.kDefaultCalibration;
-    cal();
+    mSettings.mSync.reset();
+    mSettings.mCalibration = kDefaultCalibration;
+    calSet();
 }

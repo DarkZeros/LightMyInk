@@ -61,22 +61,15 @@ void RTC_IRAM_ATTR wake_stub_example(void)
 
     uSpi::init();
 
-    // Wait until display busy goes off & measure difference
+    // Wait until display busy goes off
     GPIO_INPUT_ENABLE(19); // TODO: Make it using the variable HW::DisplayPin::Busy
-    auto ticks = esp_cpu_get_cycle_count();
     while(GPIO_INPUT_GET(19) != 0) {
-      asm volatile("nop");
+      microSleep(displayWait);
+      kDSState.updateWait += displayWait;
+      kDSState.updateWaitReduceScale = 0; // Reset it
     }
-    // FIXME: Empirically found it is 1/3 of time reported,
-    //  it reports 13ticks/us, but runs at 40Mhz likely (40ticks/us)
-    const auto rate = esp_rom_get_cpu_ticks_per_us() * 3;
-    const auto us = (esp_cpu_get_cycle_count() - ticks) / rate;
-    // Adjust up or down as needed, we want to wait for display <500us
-    if (us > 500)
-      kDSState.updateWait += us-500;
-    else if (us == 0) {
-      kDSState.updateWait -= 200;
-    }
+    // Reduce it a bit every iteration
+    kDSState.updateWait -= displayWaitReduce << ++kDSState.updateWaitReduceScale;
 
     if (kDSState.redrawDec) {
       kDSState.redrawDec = false;

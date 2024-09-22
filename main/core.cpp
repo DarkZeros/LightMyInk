@@ -18,26 +18,38 @@ Core::Core()
 , mTouch{kSettings.mTouch}
 , mNow{mTime.getElements()}
 , mUi{
-    UI::Menu{"Main Menu", {
+UI::Menu{"Main Menu", {
     UI::Menu{"Clock", {
-        UI::DateTime{"DateTime", mTime},
+        UI::DateTime{"Set DateTime", mTime},
         UI::Menu{"Calibration", {
-            UI::Text{[]() -> std::string {
-                return " Drift: " + std::to_string(kSettings.mTime.mDrift);
-            }},
-            UI::Text{[]() -> std::string {
-                if (kSettings.mTime.mLastSync == 0)
-                    return " No last Sync";
-                return " LastSync: " + std::to_string(kSettings.mTime.mLastSync);
-            }},
             UI::Action{"Sync", [&](){
-                mTime.calSync();
+                mTime.calUpdate();
             }},
             UI::Action{"Reset", [&](){
                 mTime.calReset();
             }},
+            UI::Text{[&]() -> std::string {
+                if (!kSettings.mTime.mSync)
+                    return " Not calibrated\n Set Date/Time\n then press Sync";
+                auto& sync = *kSettings.mTime.mSync;
+                tmElements_t last;
+                breakTime(sync.mTime.tv_sec, last);
+                char lastTime[32];
+                std::sprintf(lastTime, "\n  %02d:%02d:%02d\n  %02d/%02d/%04d", last.Hour, last.Minute, last.Second, last.Day, last.Month, last.Year + 1970);
+                auto elapsed = mTime.getTimeval().tv_sec - sync.mTime.tv_sec;
+                auto actuallyElapsed = elapsed - kSettings.mTime.mSync->mDrift.tv_sec;
+                bool megasec = actuallyElapsed > 1'000'000;
+                char ppm[10];
+                std::sprintf(ppm, "%+.2f", mTime.getPpm());
+
+                return "\n Started on:" + std::string(lastTime) +
+                "\n Err: " + std::to_string(kSettings.mTime.mSync->mDrift.tv_sec) +
+                    "/" + std::to_string(actuallyElapsed / (megasec ? 1'000'000 : 1)) + (megasec ? "M" : "") +
+                "\n PPM:" + std::string(ppm) +
+                "\n Cal:" + std::to_string(kSettings.mTime.mCalibration);
+            }},
         }},
-        UI::Menu{"Hourly", {
+        UI::Menu{"Hour Beep", {
             UI::Bool{"Beep",
                 [](){return kSettings.mHourly.mBeep; },
                 [](bool val){ kSettings.mHourly.mBeep = val; }
@@ -55,6 +67,14 @@ Core::Core()
                 [](){ kSettings.mHourly.mEnd = (kSettings.mHourly.mEnd + 1) % 24; }
             }
         }},
+        UI::Menu{"Alarms", {
+        }},
+    }},
+    UI::Menu{"Watchface", {
+        UI::Loop<int>{"Style",
+            []() -> int { return kSettings.mWatchface.mType; },
+            [](){ kSettings.mWatchface.mType = (kSettings.mWatchface.mType + 1) % 4; }
+        },
     }},
     UI::Menu{"Display", {
         UI::Bool{"Invert",
@@ -70,59 +90,58 @@ Core::Core()
             [](){ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
         },
     }},
-    UI::Name{"Touch"},
-    UI::Menu{"Test", {
-        UI::Action{"Vib 2x75ms", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::vibrator(std::vector<int>{75,75,75});
-            }));
-        }},
-        UI::Action{"Vib 1x75ms", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::vibrator(std::vector<int>{75});
-            }));
-        }},
-        UI::Action{"Vib 200ms", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::vibrator(std::vector<int>{200});
-            }));
-        }},
-        UI::Action{"Scale", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::speaker(std::vector<std::pair<int,int>>{
-                    {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
-                    {6400,1000},{10000,1000},{12000,1000}});
-            }));
-        }},
-        UI::Action{"Beep", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::speaker(
-                    std::vector<std::pair<int,int>>{
-                    {3200,100},{0,100},{3200,100}});
-            }));
-        }},
-        UI::Action{"Tetris", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::tetris();
-            }));
-        }},
-    }},
-    UI::Menu{"Test2", {
-        UI::Action{"Light 1s", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::light(1'000'000);
-            }));
-        }},
-        UI::Action{"Light 100s", [&](){
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::light(100'000'000);
-            }));
-        }},
-    }},
-}}
-}
+
+    // UI::Menu{"Touch", {}},
+    // UI::Menu{"Test", {
+    //     UI::Action{"Vib 2x75ms", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::vibrator(std::vector<int>{75,75,75});
+    //         }));
+    //     }},
+    //     UI::Action{"Vib 1x75ms", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::vibrator(std::vector<int>{75});
+    //         }));
+    //     }},
+    //     UI::Action{"Vib 200ms", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::vibrator(std::vector<int>{200});
+    //         }));
+    //     }},
+    //     UI::Action{"Scale", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::speaker(std::vector<std::pair<int,int>>{
+    //                 {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
+    //                 {6400,1000},{10000,1000},{12000,1000}});
+    //         }));
+    //     }},
+    //     UI::Action{"Beep", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::speaker(
+    //                 std::vector<std::pair<int,int>>{
+    //                 {3200,100},{0,100},{3200,100}});
+    //         }));
+    //     }},
+    //     UI::Action{"Tetris", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::tetris();
+    //         }));
+    //     }},
+    // }},
+    // UI::Menu{"Test2", {
+    //     UI::Action{"Light 1s", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::light(1'000'000);
+    //         }));
+    //     }},
+    //     UI::Action{"Light 100s", [&](){
+    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+    //             Peripherals::light(100'000'000);
+    //         }));
+    //     }},
+    // }},
+}}}
 {
-    // ESP_LOGE("", "cend %lu", micros());
 }
 
 void Core::boot() {
@@ -194,7 +213,10 @@ void Core::boot() {
         // Instantiate the watchface type we are using
         switch(kSettings.mWatchface.mType) {
             default: DefaultWatchface(ARGS).draw(); break;
-            case 1: break;
+            // case 0: break;
+            // case 1: break;
+            // case 2: break;
+            // case 3: break;
         }
         #undef ARGS
     } else {
@@ -223,8 +245,8 @@ void Core::firstTimeBoot() {
     struct timeval tv{.tv_sec=1723194200, .tv_usec=0};
     // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
     mTime.setTime(tv);
-    // Set calibration to the ESP32
-    mTime.cal();
+    // reset calibration to the ESP32
+    mTime.calReset();
 }
 const UI::Any& Core::findUi() {
     // Find current UI element in view by recursively finding deeper elements
@@ -253,11 +275,12 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
 
     // Button press on the watchface
     if (ui.mDepth < 0) {
-        if (btn == Touch::Light)
-            ; //TODO: Add task to run light while screen update
-        else if (btn == Touch::Menu) {
+        if (btn == Touch::Light) {
+            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+                Peripherals::light(2'000'000);
+            }));
+        } else if (btn == Touch::Menu) {
             ui.mDepth = 0;
-            // ui.mState[ui.mDepth] = 0; // Do not set it to 0, remember value
         }
         return;
     }
