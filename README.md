@@ -23,31 +23,34 @@ The project requires specific HW, and is based around the "Watchy" idea. But dif
 * There are pins/points for capacitive touch
 
 The project goals are:
-[ ] Time accurate
-    [ ] NTP sync - Wifi - AutoZone
-    [ ] Calculate drift and adjust it
-    [ ] Thermal Adjust the drift
-    [ ] 1ppm Target (now 10ppm)
-[ ] Battery Control
-    [ ] Track battery & estimate
-    [ ] Dinamic adjust Refresh rate
-    [ ] Night time, saving ours
-[ ] Different UI options
-    [ ] Moon Indicator
-    [ ] SunSet Sunrise
-    [ ] Tides
-[ ] Alarms
-[ ] RTC connection - Configuration
-[ ] Touch UI - Settings
-    [ ] Capacitive Touch functionality
-    [ ] Settings Menu & Storage to NVS
-[ ] Vibrator
-[ ] Piezoelectric
-[ ] LED led
-[ ] BT - Companion App ?
+- [X] Basic UI functionality and Widgets
+  - [X] Ultra low consumption <0.5 mAh/day!
+- [X] Features
+  - [X] Deep Sleep Lambda
+  - [X] LED light
+  - [X] Vibration
+  - [X] Speaker
+- [X] Time accurate
+  - [X] Manual calibrate drift and adjust it
+  - [X] 1ppm Target (now 10ppm)
+  - [ ] Thermal Adjust the drift ?
+  - [ ] NTP sync - Wifi - AutoZone
+- [X] Battery Power support
+  - [X] Track battery & estimate
+  - [X] Auto power save
+  - [X] Night time, saving ours
+- [X] Touch Settings
+  - [X] Capacitive Touch functionality
+  - [ ] Touch configuration - Sensitivity
+- [ ] Watchface configuration
+  - [X] Moon Indicator
+  - [ ] SunSet Sunrise
+  - [ ] Tides
+  - [ ] Pictures, etc
+- [ ] Configurable Alarms
+- [ ] BT - Companion App ?
 
-All this while preserving an ultra low power profile.
-Ideally we should aim to render/update/configure in the time the display circuit takes to boot up.
+All this while preserving an ultra low power profile! :)
 
 ## Helping the project
 
