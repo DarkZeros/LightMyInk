@@ -333,6 +333,11 @@ void Core::deepSleep() {
     mDisplay.hibernate();
 
     if (!kSettings.mLeakPinsSet) {
+        kSettings.mLeakPinsSet = true;
+
+        // Set oscialltor config PCF8563
+        // TODO
+
         // Can take 1ms to run this code
         // Set all GPIOs to input that we are not using to avoid leaking power
         // Set GPIOs 0-39 to input to avoid power leaking out
@@ -343,7 +348,6 @@ void Core::deepSleep() {
             // ESP_LOGE("", "%d input", i);
             pinMode(i, INPUT);
         }
-        kSettings.mLeakPinsSet = true;
     }
     Power::low();
 

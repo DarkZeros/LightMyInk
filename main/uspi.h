@@ -3,18 +3,9 @@
 #include "soc/reg_base.h"
 #include "soc/spi_struct.h"
 #include "soc/dport_reg.h"
-#include "soc/io_mux_reg.h"
+
 #include "settings.h"
-
-#define GPIO_INPUT_ENABLE(pin) \
-  PIN_FUNC_SELECT(GPIO_PIN_REG_##pin, PIN_FUNC_GPIO); \
-  PIN_INPUT_ENABLE(GPIO_PIN_REG_##pin); \
-  REG_WRITE(GPIO_ENABLE_W1TC_REG, (1UL << pin));
-
-#define GPIO_INPUT_DISABLE(pin) \
-  PIN_FUNC_SELECT(GPIO_PIN_REG_##pin, PIN_FUNC_GPIO); \
-  PIN_INPUT_DISABLE(GPIO_PIN_REG_##pin); \
-  REG_WRITE(GPIO_ENABLE_W1TC_REG, (1UL << pin));
+#include "deep_sleep_utils.h"
 
 namespace uSpi {
   spi_dev_t& dev = *(reinterpret_cast<volatile spi_dev_t *>(DR_REG_SPI3_BASE));
@@ -23,7 +14,7 @@ namespace uSpi {
     auto clockDiv = 266241; // or even 8193 for 26MHz SPI !
 
     // pinMode(HW::DisplayPin::Sck, INPUT);
-    GPIO_INPUT_ENABLE(18);
+    GPIO_MODE_INPUT(18);
     // TODO: Make it using the variable HW::DisplayPin::Sck
 
     dev.slave.trans_done = 0;
@@ -60,7 +51,7 @@ namespace uSpi {
     dev.pin.val = dev.pin.val & ~((1 << 0) & SPI_SS_MASK_ALL);
 
     // pinMode(HW::DisplayPin::Dc, OUTPUT);
-    GPIO_INPUT_DISABLE(10);
+    GPIO_MODE_OUTPUT(10);
     // TODO: Make it using the variable HW::DisplayPin::Dc
   }
 

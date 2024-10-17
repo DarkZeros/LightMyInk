@@ -19,6 +19,7 @@
 #include "hal/wdt_hal.h"
 
 #include "hardware.h"
+#include "power.h"
 #include "uspi.h"
 #include "deep_sleep.h"
 
@@ -26,8 +27,9 @@ RTC_DATA_ATTR DeepSleepState kDSState;
 
 void RTC_IRAM_ATTR turnOffGpio() {
   using namespace HW::DisplayPin;
-  for (auto& pin : std::array{Cs, Dc, Res, Busy, Mosi, Sck})
+  for (auto& pin : std::array{Cs, Dc, Res, Busy, Mosi, Sck}) {
     GPIO_DIS_OUTPUT(pin);
+  }
 }
 
 void RTC_IRAM_ATTR feed_wdt() {
@@ -59,10 +61,13 @@ void RTC_IRAM_ATTR wake_stub_example(void)
   if (kDSState.displayBusy) {
     kDSState.displayBusy = false;
 
+    // Go back to low power mode
+    Power::low();
+
     uSpi::init();
 
     // Wait until display busy goes off
-    GPIO_INPUT_ENABLE(19); // TODO: Make it using the variable HW::DisplayPin::Busy
+    GPIO_MODE_INPUT(19); // TODO: Make it using the variable HW::DisplayPin::Busy
     while(GPIO_INPUT_GET(19) != 0) {
       microSleep(displayWait);
       kDSState.updateWait += displayWait;
@@ -101,7 +106,7 @@ void RTC_IRAM_ATTR wake_stub_example(void)
     if (mask == 32){
       touch_ll_clear_trigger_status_mask(); // This will consume the touch
 
-      GPIO_INPUT_DISABLE(25);
+      GPIO_MODE_OUTPUT(25);
       GPIO_OUTPUT_SET(HW::kLightPin, 1);
       microSleep(2'000'000); // 2secs fixed
       GPIO_OUTPUT_SET(HW::kLightPin, 0);
@@ -123,10 +128,14 @@ void RTC_IRAM_ATTR wake_stub_example(void)
   }
 
   // Reset display to wake it up
-  GPIO_INPUT_DISABLE(9); // TODO: Make it using the variable HW::DisplayPin::Res
+  GPIO_MODE_OUTPUT(9); // TODO: Make it using the variable HW::DisplayPin::Res
   GPIO_OUTPUT_SET(HW::DisplayPin::Res, 0);
   esp_rom_delay_us(1'000);
   GPIO_OUTPUT_SET(HW::DisplayPin::Res, 1);
+
+  // Turn on high power mode since it makes display use less power (not sure why)
+  // It will take around 125us * 0.1V, for 1.5V = 1.6ms
+  Power::high();
 
   // Calculate the areas to update based on time and watchface states
   const auto u = kDSState.currentMinutes % 10;
