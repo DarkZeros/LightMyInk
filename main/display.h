@@ -15,6 +15,8 @@
 
 #include "hardware.h"
 
+#include "lut.h"
+
 struct DisplaySettings {
   // Settings that can be changed
   bool mInvert : 1 {false};
@@ -34,6 +36,7 @@ public:
   static constexpr bool kSingleSPI = false; // Assumes only display uses SPI
   static constexpr bool kCsHw = true; // Gives the SPI driver the Cs control
   static constexpr bool kOverdriveSPI = false; // Uses a 25% faster SPI out of spec
+  static constexpr bool kCustomLut = true; // Uses a custom LUT in the driver
 
   static constexpr uint8_t WIDTH = 200;
   static constexpr uint8_t HEIGHT = WIDTH;
