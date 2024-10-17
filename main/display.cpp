@@ -120,89 +120,37 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
     }
 
     // Custom LUT?
-    if (false) {
-      _transferCommand(0x32); /* write LUT register*/
-      constexpr std::array<uint8_t, 20> original{
-        0x02, 0x02, 0x01, 0x11,
-        0x12, 0x12, 0x22, 0x22,
-        0x66, 0x69, 0x69, 0x59,
-        0x58, 0x99, 0x99, 0x88,
-        0x00, 0x00, 0x00, 0x00
-      };
-      _transfer(original.data(), 20);
+    if (kCustomLut) {
+      // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FULL_REFRESH;
+      // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH;
+      // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH_KEEP;
+      auto& lut = watchLut;
+
+      /* Always write main part of LUT register */
+      _transferCommand(0x32);
+      _transfer(lut.get().data(), 153);
+      // End Option (EOPT)
+      if (lut.eopt) {
+        _transferCommand(0x3F); // set Lut option End
+        _transfer(*lut.eopt);
+      }
+      /* GATE_DRIVING_VOLTAGE */ 
+      if (lut.vgh) {
+        _transferCommand(0x03);
+        _transfer(*lut.vgh);
+      }
+      /* SRC_DRIVING_VOLTAGE */
+      if (lut.vsh1_vsh2_vsl) {
+        _transferCommand(0x04);
+        _transfer(lut.vsh1_vsh2_vsl->data(), 3);  
+      }
+      /* SET_VCOM_REG */
+      if (lut.vcom) {
+        _transferCommand(0x2c);
+        _transfer(*lut.vcom);
+      }
+
     }
-      // /* according to the command table, the lut has 240 bits (=30 bytes * 8 bits) */
-      
-      // /* Waveform part of the LUT (20 bytes) */
-      // /* bit 7/6: 1 - 1 transition */
-      // /* bit 5/4: 1 - 0 transition */
-      // /* bit 3/2: 0 - 1 transition */
-      // /* bit 1/0: 0 - 0 transition */
-      // /* 	00 – VSS */
-      // /* 	01 – VSH */
-      // /* 	10 – VSL */
-      // /* 	11 – NA */
-      
-      // /* original values, L-macro */
-      // U8X8_A(L(0,0,0,2)), // 0x02
-      // U8X8_A(L(0,0,0,2)), // 0x02
-      // U8X8_A(L(0,0,0,1)), // 0x01
-      // U8X8_A(L(0,1,0,1)), // 0x11
-      // U8X8_A(L(0,1,0,2)), // 0x12
-      // U8X8_A(L(0,1,0,2)), // 0x12
-      // U8X8_A(L(0,2,0,2)), // 0x22
-      // U8X8_A(L(0,2,0,2)), // 0x22
-      // U8X8_A(L(1,2,1,2)), // 0x66
-      // U8X8_A(L(1,2,2,1)), // 0x69
-      // U8X8_A(L(1,2,2,1)), // 0x69
-      // U8X8_A(L(1,1,2,1)), // 0x59
-      // U8X8_A(L(1,1,2,0)), // 0x58
-      // U8X8_A(L(2,1,2,1)), // 0x99
-      // U8X8_A(L(2,1,2,1)), // 0x99
-      // U8X8_A(L(2,0,2,0)), // 0x88
-      // U8X8_A(L(0,0,0,0)), // 0x00
-      // U8X8_A(L(0,0,0,0)), // 0x00
-      // U8X8_A(L(0,0,0,0)), // 0x00
-      // U8X8_A(L(0,0,0,0)), // 0x00
-
-
-      // /* orginal values without 0-0 and 1-1 transition */
-      // /*
-      // U8X8_A(L(3,0,0,3)), // 0x02
-      // U8X8_A(L(3,0,0,3)), // 0x02
-      // U8X8_A(L(3,0,0,3)), // 0x01
-      // U8X8_A(L(3,1,0,3)), // 0x11
-      // U8X8_A(L(3,1,0,3)), // 0x12
-      // U8X8_A(L(3,1,0,3)), // 0x12
-      // U8X8_A(L(3,2,0,3)), // 0x22
-      // U8X8_A(L(3,2,0,3)), // 0x22
-      // U8X8_A(L(3,2,1,3)), // 0x66
-      // U8X8_A(L(3,2,2,3)), // 0x69
-      // U8X8_A(L(3,2,2,3)), // 0x69
-      // U8X8_A(L(3,1,2,3)), // 0x59
-      // U8X8_A(L(3,1,2,3)), // 0x58
-      // U8X8_A(L(3,1,2,3)), // 0x99
-      // U8X8_A(L(3,1,2,3)), // 0x99
-      // U8X8_A(L(3,0,2,3)), // 0x88
-      // U8X8_A(L(3,0,0,3)), // 0x00
-      // U8X8_A(L(3,0,0,3)), // 0x00
-      // U8X8_A(L(3,0,0,3)), // 0x00
-      // U8X8_A(L(3,0,0,3)), // 0x00
-      // */
-      
-      
-      // /* Timing part of the LUT, 20 Phases with 4 bit each: 10 bytes */
-      // U8X8_A(0xF8),
-      // U8X8_A(0xB4),
-      // U8X8_A(0x13),
-      // U8X8_A(0x51),
-      // U8X8_A(0x35),
-      // U8X8_A(0x51),
-      // U8X8_A(0x51),
-      // U8X8_A(0x19),
-      // U8X8_A(0x01),
-      // U8X8_A(0x00),
-
 
     // setRamAdressMode
     _transferCommand(0x11); // set ram entry mode
@@ -256,7 +204,7 @@ void Display::_setRefreshMode(bool partial)
   //xxxx1xxx // Display mode 2
   //xxxxx1xx // Display! 
 
-  constexpr auto kTurnOnLoadLutDisplay = 0b11010100;
+  constexpr auto kTurnOnLoadLutDisplay = 0b11000100 | (kCustomLut ? 0x0 : 0b10000);
   constexpr auto kLoadTemp = 0b00100000;
   constexpr auto kPartialMode = 0b00001000;
 
@@ -301,10 +249,14 @@ void Display::waitWhileBusy() {
   if (gpio_get_level((gpio_num_t)HW::DisplayPin::Busy) == 0)
     return;
 
+  ESP_LOGE("st", "%ld", micros());
+
   esp_sleep_enable_timer_wakeup(10'000'000); // Safe value
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
   esp_light_sleep_start();
+
+   ESP_LOGE("done", "%ld", micros());
 }
 
 void Display::setDarkBorder(bool dark) {

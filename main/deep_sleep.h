@@ -2,7 +2,9 @@
 
 // constexpr static int fixedDisplayUpdateMargin = 333'000; // This is valid for V1-V2 original displays
 // constexpr static int fixedDisplayUpdateMargin = 241'000; // GoodDisplay value, with fast LUT
-constexpr static int fixedDisplayUpdateMargin = 230'000; // A lower value, it will be corrected on first run
+//constexpr static int fixedDisplayUpdateMargin = 230'000; // A lower value, it will be corrected on first run
+constexpr static int fixedDisplayUpdateMargin = 25'000; // Super low value for custom LUTs
+
 
 constexpr static int displayWaitReduce = 500;
 constexpr static int displayWait = 100;

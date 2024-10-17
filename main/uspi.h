@@ -115,7 +115,7 @@ namespace uSpi {
   }
 
   void RTC_IRAM_ATTR refresh() {
-    // Set partial mode ? It should be already set
+    // Set partial mode ? It should be already set, don't touch it
     // command(0x22);
     // transfer(0b11010100 | 0b00001000);
     // Update
