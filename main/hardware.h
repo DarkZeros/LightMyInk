@@ -26,4 +26,6 @@ constexpr uint8_t kSpeakerPin = 26;
 constexpr uint8_t kVibratorPin = 27;
 constexpr uint8_t kVoltageSelectPin = 13;
 
+constexpr uint8_t kRevision = 2; // New 2024/Oct
+
 } // namespace HW
