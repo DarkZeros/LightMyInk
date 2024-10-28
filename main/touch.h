@@ -3,7 +3,7 @@
 #include <cstdint> 
 
 struct TouchSettings {
-    uint16_t mThreshold{30};
+    uint16_t mThreshold{35};
     uint16_t mMeasCycles{1024};
     uint16_t mMeasInterval{4*4096};
     uint8_t mMap[4]{0,1,2,3};

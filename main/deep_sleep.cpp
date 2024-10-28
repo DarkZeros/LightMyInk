@@ -106,10 +106,14 @@ void RTC_IRAM_ATTR wake_stub_example(void)
     if (mask == 32){
       touch_ll_clear_trigger_status_mask(); // This will consume the touch
 
+      // LED is powered from VDD, and we need to rise it to 3.3V,
+      // because 1.9V is too low for the LED to light up
+      Power::high();
       GPIO_MODE_OUTPUT(25);
       GPIO_OUTPUT_SET(HW::kLightPin, 1);
       microSleep(2'000'000); // 2secs fixed
       GPIO_OUTPUT_SET(HW::kLightPin, 0);
+      Power::low();
 
       // Go back to sleep
       esp_wake_stub_sleep(&wake_stub_example);

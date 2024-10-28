@@ -14,7 +14,7 @@ void Touch::setUp(bool onlyMenuLight) {
     return;
   }
   touch_pad_init();
-  touch_pad_set_voltage(TOUCH_HVOLT_2V5, TOUCH_LVOLT_0V5, TOUCH_HVOLT_ATTEN_0V); 
+  touch_pad_set_voltage(TOUCH_HVOLT_2V4, TOUCH_LVOLT_0V5, TOUCH_HVOLT_ATTEN_0V);
   //touch_pad_set_cnt_mode(); 
   touch_pad_set_measurement_clock_cycles(mSettings.mMeasCycles);
   touch_pad_set_measurement_interval(mSettings.mMeasInterval);
