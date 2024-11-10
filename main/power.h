@@ -1,19 +1,17 @@
 
 #pragma once
 
-#define DEEP_SLEEP_SAFE_VOLTAGE
+#include "esp_attr.h"
 
-#ifdef DEEP_SLEEP_SAFE_VOLTAGE
-    #include "esp_attr.h"
-    #define POWER_IRAM RTC_IRAM_ATTR
-#else
-    #define POWER_IRAM
-#endif
+#include <atomic>
 
-/* Helper class to handle extra power needed for WiFi operations
+/* Helper class to handle extra power needed for WiFi/Display operations
  */
 struct Power {
-    static void POWER_IRAM high() { setVoltage(true); }
-    static void POWER_IRAM low() { setVoltage(false); }
-    static void POWER_IRAM setVoltage(bool high);
+    static void RTC_IRAM_ATTR high() { set(true); }
+    static void RTC_IRAM_ATTR low() { set(false); }
+    static void RTC_IRAM_ATTR set(bool high);
+
+    static void RTC_IRAM_ATTR lock();
+    static void RTC_IRAM_ATTR unlock();
 };

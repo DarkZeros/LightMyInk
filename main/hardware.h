@@ -20,12 +20,15 @@ namespace DisplayPin {
 }
 
 constexpr uint8_t kAdcPin = 34;
+constexpr uint8_t kBusyIntPin = 35; // On HW v3
 constexpr uint8_t kRtcIntPin = 32;
 constexpr uint8_t kLightPin = 25;
 constexpr uint8_t kSpeakerPin = 26;
 constexpr uint8_t kVibratorPin = 27;
 constexpr uint8_t kVoltageSelectPin = 13;
 
-constexpr uint8_t kRevision = 2; // New 2024/Oct
+// constexpr uint8_t kRevision = 1; // Original
+constexpr uint8_t kRevision = 2; // New 2024/Oct / Swap PowerLevels
+// constexpr uint8_t kRevision = 3; // New 2024/Nov / Add Busy Interrupt
 
 } // namespace HW

@@ -1,6 +1,7 @@
 #include "core.h"
 #include "deep_sleep.h"
 #include "power.h"
+#include "light.h"
 #include "touch.h"
 #include "peripherals.h"
 #include "hardware.h"
@@ -241,6 +242,7 @@ void Core::firstTimeBoot() {
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     // Select default voltage 2.6V
     Power::low();
+    Light::off();
     // HACK: Set a fixed time to start with
     struct timeval tv{.tv_sec=1723194200, .tv_usec=0};
     // struct timezone tz{.tz_minuteswest=60, .tz_dsttime=1};
@@ -277,7 +279,7 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
     if (ui.mDepth < 0) {
         if (btn == Touch::Light) {
             mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::light(2'000'000);
+                Light::toggle();
             }));
         } else if (btn == Touch::Menu) {
             ui.mDepth = 0;
@@ -319,14 +321,13 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
 }
 
 /*void Core::NTPSync() {
-    // Select default voltage 2.9V for WiFi
-    Power::high();
+    // Select default voltage 2.9V/3.3V for WiFi
+    Power::lock();
     //sleep(3);
     // We need Arduino for this (WiFi + NTP)
     initArduino();
     showSyncNTP();
-    // Select default voltage 2.6V
-    setVoltage(false);
+    Power::unlock();
 }*/
 
 void Core::deepSleep() {
@@ -335,7 +336,7 @@ void Core::deepSleep() {
     if (!kSettings.mLeakPinsSet) {
         kSettings.mLeakPinsSet = true;
 
-        // Set oscialltor config PCF8563
+        // Set oscilator config PCF8563
         // TODO
 
         // Can take 1ms to run this code
@@ -349,7 +350,6 @@ void Core::deepSleep() {
             pinMode(i, INPUT);
         }
     }
-    Power::low();
 
     mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
 

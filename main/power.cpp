@@ -1,73 +1,38 @@
 #include "power.h"
 #include "hardware.h"
 
-#include "esp_attr.h"
 #include "driver/gpio.h"
 
 #include "esp32-hal-log.h"
 
 namespace {
-  RTC_DATA_ATTR bool kSet{false};
-  RTC_DATA_ATTR bool kPrevVoltage{false};
-
-  void setupPin() {
-    if (kSet)
-      return;
-
-    constexpr const gpio_config_t kConf = {
-      .pin_bit_mask = (1ULL<<HW::kVoltageSelectPin),
-      .mode = GPIO_MODE_OUTPUT,
-      .pull_up_en = GPIO_PULLUP_DISABLE,
-      .pull_down_en = GPIO_PULLDOWN_DISABLE,
-      .intr_type = GPIO_INTR_DISABLE,
-    };
-    //Configure GPIO with the given settings
-    gpio_config(&kConf);
-  }
+  RTC_DATA_ATTR bool kPrev{false};
+  RTC_DATA_ATTR std::atomic<int> kLock{0};
 } // namespace
-
-#ifndef DEEP_SLEEP_SAFE_VOLTAGE
-
-void Power::setVoltage(bool high) {
-  // The value changes based on the board! Old boards have the values fliped
-  if (HW::kRevision >= 2)
-    high = !high;
-
-  // Caches previous values
-  if (kSet && kPrevVoltage == high)
-    return;
-
-  //Disable previous holds
-  gpio_hold_dis((gpio_num_t)HW::kVoltageSelectPin);
-  gpio_deep_sleep_hold_dis();
-
-  //Configure GPIO with the given settings
-  setupPin();
-
-  // Set new level
-  gpio_set_level((gpio_num_t)HW::kVoltageSelectPin, high ? 1 : 0);
-  
-  // Set the holds for sleep modes
-  gpio_hold_en((gpio_num_t)HW::kVoltageSelectPin);
-  gpio_deep_sleep_hold_en();
-
-  // ESP_LOGE("Power", "Changed to %d", high);
-  kSet = true;
-  kPrevVoltage = high;
-}
-#else
 
 #include "soc/rtc_periph.h"
 #include "rom/gpio.h"
 #include "deep_sleep_utils.h"
 
-void RTC_IRAM_ATTR Power::setVoltage(bool high) {
+void Power::lock() {
+  if (kLock.fetch_add(1, std::memory_order_acq_rel) == 0) {
+    high();
+  }
+}
+
+void Power::unlock() {
+  if (kLock.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    low();
+  }
+}
+
+void Power::set(bool high) {
   // The value changes based on the board! Old boards have the values fliped
   if (HW::kRevision >= 2)
     high = !high;
 
   // Caches previous values
-  if (kSet && kPrevVoltage == high)
+  if (kPrev == high)
     return;
 
   // Not initialized in DeepSleep
@@ -80,8 +45,6 @@ void RTC_IRAM_ATTR Power::setVoltage(bool high) {
   // Deep sleep hold disable
   CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_DG_PAD_AUTOHOLD_EN_M);
 
-  // This should only have been called once on startup
-  setupPin();
   GPIO_MODE_OUTPUT(13);
   GPIO_OUTPUT_SET(HW::kVoltageSelectPin, high);
 
@@ -93,8 +56,5 @@ void RTC_IRAM_ATTR Power::setVoltage(bool high) {
   CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_DG_PAD_FORCE_UNHOLD);
   SET_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_DG_PAD_AUTOHOLD_EN_M);
 
-  kSet = true;
-  kPrevVoltage = high;
+  kPrev = high;
 }
-
-#endif

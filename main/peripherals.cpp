@@ -24,25 +24,6 @@ void Peripherals::vibrator(std::vector<int> pattern) {
   gpio_set_level((gpio_num_t)HW::kVibratorPin, 0);
 }
 
-void Peripherals::light(uint32_t us) {
-  constexpr const gpio_config_t kConf = {
-    .pin_bit_mask = (1ULL<<HW::kLightPin),
-    .mode = GPIO_MODE_OUTPUT,
-    .pull_up_en = GPIO_PULLUP_DISABLE,
-    .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE,
-  };
-
-  //Configure GPIO with the given settings
-  gpio_config(&kConf);
-
-  gpio_set_level((gpio_num_t)HW::kLightPin, 1);
-  esp_sleep_enable_timer_wakeup(us);
-  esp_light_sleep_start();
-
-  gpio_set_level((gpio_num_t)HW::kLightPin, 0);
-}
-
 #include "driver/ledc.h"
 
 struct Speaker {

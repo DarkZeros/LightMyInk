@@ -20,6 +20,7 @@ set(srcs
     battery.cpp
     core.cpp
     power.cpp
+    light.cpp
     touch.cpp
     peripherals.cpp
     time.cpp

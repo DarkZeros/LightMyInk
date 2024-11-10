@@ -20,8 +20,13 @@
 
 #include "hardware.h"
 #include "power.h"
+#include "light.h"
 #include "uspi.h"
 #include "deep_sleep.h"
+
+#include "esp_attr.h"
+#include "soc/rtc_periph.h"
+#include "rom/gpio.h"
 
 RTC_DATA_ATTR DeepSleepState kDSState;
 
@@ -62,7 +67,7 @@ void RTC_IRAM_ATTR wake_stub_example(void)
     kDSState.displayBusy = false;
 
     // Go back to low power mode
-    Power::low();
+    Power::unlock();
 
     uSpi::init();
 
@@ -108,14 +113,9 @@ void RTC_IRAM_ATTR wake_stub_example(void)
 
       // LED is powered from VDD, and we need to rise it to 3.3V,
       // because 1.9V is too low for the LED to light up
-      Power::high();
-      GPIO_MODE_OUTPUT(25);
-      GPIO_OUTPUT_SET(HW::kLightPin, 1);
-      microSleep(2'000'000); // 2secs fixed
-      GPIO_OUTPUT_SET(HW::kLightPin, 0);
-      Power::low();
+      Light::toggle();
 
-      // Go back to sleep
+      // Go back to sleep, don´t touch the timer, if the user enters menu, then light will stay on
       esp_wake_stub_sleep(&wake_stub_example);
     }
     // Wake up, touch needs to handle by the Main code
@@ -131,6 +131,9 @@ void RTC_IRAM_ATTR wake_stub_example(void)
     return;
   }
 
+  // Turn off the light if it is on when we do a normal update
+  Light::off();
+
   // Reset display to wake it up
   GPIO_MODE_OUTPUT(9); // TODO: Make it using the variable HW::DisplayPin::Res
   GPIO_OUTPUT_SET(HW::DisplayPin::Res, 0);
@@ -139,7 +142,7 @@ void RTC_IRAM_ATTR wake_stub_example(void)
 
   // Turn on high power mode since it makes display use less power (not sure why)
   // It will take around 125us * 0.1V, for 1.5V = 1.6ms
-  Power::high();
+  Power::lock();
 
   // Calculate the areas to update based on time and watchface states
   const auto u = kDSState.currentMinutes % 10;
