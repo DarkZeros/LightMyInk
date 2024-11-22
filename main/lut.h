@@ -68,18 +68,19 @@ constexpr auto watchLut = LUT{
     // },
     {
       .phase = {
-        {.bb = B, .bw = W, .wb = B, .ww = W, .time = 0x1},
-        {.bb = O, .bw = B, .wb = W, .ww = O, .time = 0x1},
+        // {.bb = B, .bw = W, .wb = B, .ww = W, .time = 0x1},
+        // {.bb = O, .bw = B, .wb = W, .ww = O, .time = 0x1},
+        // {.bb = O, .bw = W, .wb = B, .ww = O, .time = 0x2},
         {.bb = O, .bw = W, .wb = B, .ww = O, .time = 0x2},
       },
       .fr = 2, // 50ms
     },
-    // {
-    //   .phase = {
-    //   {.bb = B, .bw = W, .wb = B, .ww = W, .time = 0x1},
-    //   },
-    //   .fr = 7, //??ms
-    // }
+    {
+      .phase = {
+        {.bb = B, .bw = W, .wb = B, .ww = W, .time = 0x1},
+      },
+      .fr = 8, //??ms 7:90.9ms, 8:90.2ms, 9:112.4ms,  15:90.6ms
+    }
   },
   .eopt {0x07}, // This might degrade the display quicker but it makes it better quality
   .vgh {0x17},
