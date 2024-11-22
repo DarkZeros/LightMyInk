@@ -64,7 +64,7 @@ void Time::calUpdate() {
     sync.mDrift.tv_sec = drift;
     drift -= sync.mDrift.tv_sec;
     sync.mDrift.tv_usec = drift * 1'000'000;
-    // time = mTv; // Do not change time, carry over from the start
+    time = mTv; // The drift is from the last sync to now
     mSettings.mCalibration = std::clamp(cal, kDefaultCalibration / 10, kDefaultCalibration * 10);
 
     calSet();

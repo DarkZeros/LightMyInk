@@ -31,7 +31,7 @@ UI::Menu{"Main Menu", {
             }},
             UI::Text{[&]() -> std::string {
                 if (!kSettings.mTime.mSync)
-                    return " Not calibrated\n Set Date/Time\n then press Sync";
+                    return "\n Not calibrated\n Set Date/Time\n then press Sync";
                 auto& sync = *kSettings.mTime.mSync;
                 tmElements_t last;
                 breakTime(sync.mTime.tv_sec, last);
@@ -43,7 +43,7 @@ UI::Menu{"Main Menu", {
                 char ppm[10];
                 std::sprintf(ppm, "%+.2f", mTime.getPpm());
 
-                return "\n Started on:" + std::string(lastTime) +
+                return "\n Last sync on:" + std::string(lastTime) +
                 "\n Err: " + std::to_string(kSettings.mTime.mSync->mDrift.tv_sec) +
                     "/" + std::to_string(actuallyElapsed / (megasec ? 1'000'000 : 1)) + (megasec ? "M" : "") +
                 "\n PPM:" + std::string(ppm) +
