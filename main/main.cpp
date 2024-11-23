@@ -1,10 +1,13 @@
 
 #include "core.h"
 
-Core lightMyInk;
+Core& getInstance() {
+    static Core instance; // Lazily initialized on first call
+    return instance;
+}
 
 extern "C" {
 void app_main(void) {
-    lightMyInk.boot();
+    getInstance().boot();
 }
 }

@@ -50,6 +50,8 @@ public:
 
   Display();
 
+  void init();
+
   void rotate(Rect& rect) const;
   void alignRect(Rect& rect) const;
   Rect getTextRect(const char * str, int16_t xc = -1, int16_t yc = -1);

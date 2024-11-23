@@ -57,6 +57,9 @@ void Display::_transferCommand(uint8_t c)
 }
 
 Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
+  // Display requires ISR service for busy pin
+  gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1);
+
   // Set pins
   if (!kCsHw)
     pinMode(HW::DisplayPin::Cs, OUTPUT);
@@ -85,84 +88,85 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
     SPI.setHwCs(true);
   if (kSingleSPI)
     SPI.beginTransaction(_spi_settings);
+}
 
+void Display::init() {
   // This only needs to be done once
-  if (!kState.initialized)
-  {
-    _startTransfer();
-    _transferCommand(0x12); // SW reset all values to factory defaults
-    _endTransfer();
-    waitWhileBusy();
+  if (kState.initialized)
+    return;
 
-    _startTransfer();
-    _transferCommand(0x01); // Driver output control
-    _transfer(0xC7); // 0x0C7 is already the default
-    _transfer(0b0);
-    _transfer(0b000); // Gate scanning sequence, default 000
-    // TODO: Can implement mirror Y feature with this bit 001
+  _startTransfer();
+  _transferCommand(0x12); // SW reset all values to factory defaults
+  _endTransfer();
+  waitWhileBusy();
 
-    if constexpr (kReduceBoosterTime) {
-      // SSD1675B controller datasheet
-      _transferCommand(0x0C); // BOOSTER_SOFT_START_CONTROL
-      // Set the driving strength of GDR for all phases to maximun 0b111 -> 0xF
-      // Set the minimum off time of GDR to minimum 0x4 (values below sould be same)
-      _transfer(0xF4); // Phase1 Default value 0x8B
-      _transfer(0xF4); // Phase2 Default value 0x9C
-      _transfer(0xF4); // Phase3 Default value 0x96
-      _transfer(0x00); // Duration of phases, Default 0xF = 0b00 11 11 (40ms Phase 1/2, 10ms Phase 3)
-    }
+  _startTransfer();
+  _transferCommand(0x01); // Driver output control
+  _transfer(0xC7); // 0x0C7 is already the default
+  _transfer(0b0);
+  _transfer(0b000); // Gate scanning sequence, default 000
+  // TODO: Can implement mirror Y feature with this bit 001
 
-    if constexpr (kFastUpdateTemp) {
-      // Write 50ºC fixed temp (fastest update, but less quality)
-      _transferCommand(0x1A);
-      _transfer(0x32);
-      _transfer(0x00);
-    }
-
-    // Custom LUT?
-    if (kCustomLut) {
-      // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FULL_REFRESH;
-      // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH;
-      // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH_KEEP;
-      auto& lut = watchLut;
-
-      /* Always write main part of LUT register */
-      _transferCommand(0x32);
-      _transfer(lut.get().data(), 153);
-      // End Option (EOPT)
-      if (lut.eopt) {
-        _transferCommand(0x3F); // set Lut option End
-        _transfer(*lut.eopt);
-      }
-      /* GATE_DRIVING_VOLTAGE */ 
-      if (lut.vgh) {
-        _transferCommand(0x03);
-        _transfer(*lut.vgh);
-      }
-      /* SRC_DRIVING_VOLTAGE */
-      if (lut.vsh1_vsh2_vsl) {
-        _transferCommand(0x04);
-        _transfer(lut.vsh1_vsh2_vsl->data(), 3);  
-      }
-      /* SET_VCOM_REG */
-      if (lut.vcom) {
-        _transferCommand(0x2c);
-        _transfer(*lut.vcom);
-      }
-
-    }
-
-    // setRamAdressMode
-    _transferCommand(0x11); // set ram entry mode
-    _transfer(0b11);  //  0bYX adress mode (+1/-0), Default 0b11
-
-    // Set initial refresh mode
-    kState.partial = true; // Set it to force the first call
-    _setRefreshMode(false);
-
-    _endTransfer();
-    kState.initialized = true;
+  if constexpr (kReduceBoosterTime) {
+    // SSD1675B controller datasheet
+    _transferCommand(0x0C); // BOOSTER_SOFT_START_CONTROL
+    // Set the driving strength of GDR for all phases to maximun 0b111 -> 0xF
+    // Set the minimum off time of GDR to minimum 0x4 (values below sould be same)
+    _transfer(0xF4); // Phase1 Default value 0x8B
+    _transfer(0xF4); // Phase2 Default value 0x9C
+    _transfer(0xF4); // Phase3 Default value 0x96
+    _transfer(0x00); // Duration of phases, Default 0xF = 0b00 11 11 (40ms Phase 1/2, 10ms Phase 3)
   }
+
+  if constexpr (kFastUpdateTemp) {
+    // Write 50ºC fixed temp (fastest update, but less quality)
+    _transferCommand(0x1A);
+    _transfer(0x32);
+    _transfer(0x00);
+  }
+
+  // Custom LUT?
+  if (kCustomLut) {
+    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FULL_REFRESH;
+    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH;
+    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH_KEEP;
+    auto& lut = watchLut;
+
+    /* Always write main part of LUT register */
+    _transferCommand(0x32);
+    _transfer(lut.get().data(), 153);
+    // End Option (EOPT)
+    if (lut.eopt) {
+      _transferCommand(0x3F); // set Lut option End
+      _transfer(*lut.eopt);
+    }
+    /* GATE_DRIVING_VOLTAGE */
+    if (lut.vgh) {
+      _transferCommand(0x03);
+      _transfer(*lut.vgh);
+    }
+    /* SRC_DRIVING_VOLTAGE */
+    if (lut.vsh1_vsh2_vsl) {
+      _transferCommand(0x04);
+      _transfer(lut.vsh1_vsh2_vsl->data(), 3);
+    }
+    /* SET_VCOM_REG */
+    if (lut.vcom) {
+      _transferCommand(0x2c);
+      _transfer(*lut.vcom);
+    }
+  }
+
+  // setRamAdressMode
+  _transferCommand(0x11); // set ram entry mode
+  _transfer(0b11);  //  0bYX adress mode (+1/-0), Default 0b11
+
+  // Set initial refresh mode
+  kState.partial = true; // Set it to force the first call
+  _setRefreshMode(false);
+
+  _endTransfer();
+  kState.initialized = true;
 }
 
 void Display::_setRamArea(const Rect& rect){
@@ -240,23 +244,42 @@ void Display::refresh(bool partial)
   }
 }
 
+SemaphoreHandle_t sSem = NULL;
+
+void isr(void* ) {
+  BaseType_t woken;
+  xSemaphoreGiveFromISR(sSem, &woken);
+  gpio_isr_handler_remove((gpio_num_t)HW::DisplayPin::Busy);
+}
+
+
 void Display::waitWhileBusy() {
-  // Execute the queued tasks before going to sleep waiting for display
-  for (; !mTasks.empty(); mTasks.pop()) {
-    mTasks.front()();
-  }
-  // Tasks might have last so long that display is ready now
-  if (gpio_get_level((gpio_num_t)HW::DisplayPin::Busy) == 0)
-    return;
+  //ESP_LOGE("st", "%ld", micros());
 
-  ESP_LOGE("st", "%ld", micros());
+  sSem = xSemaphoreCreateBinary();
 
-  esp_sleep_enable_timer_wakeup(10'000'000); // Safe value
+  static constexpr gpio_config_t io_conf = {
+    .pin_bit_mask = 1ULL << HW::DisplayPin::Busy,
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_LOW_LEVEL,
+  };
+  gpio_config(&io_conf);
+  gpio_isr_handler_add((gpio_num_t)HW::DisplayPin::Busy, isr, (void*) 0);
+
+  // Set the wakeup on busy, in case tasks sleep the chip as well
   gpio_wakeup_enable((gpio_num_t)HW::DisplayPin::Busy, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
-  esp_light_sleep_start();
 
-   ESP_LOGE("done", "%ld", micros());
+  if (xSemaphoreTake(sSem, 10'000 / portTICK_PERIOD_MS) != pdTRUE) {
+    ESP_LOGE("displ", "semaphore fired!");
+  }
+
+  gpio_isr_handler_remove((gpio_num_t)HW::DisplayPin::Busy);
+  vSemaphoreDelete(sSem);
+
+  // ESP_LOGE("done", "%ld", micros());
 }
 
 void Display::setDarkBorder(bool dark) {
