@@ -88,6 +88,8 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
     SPI.setHwCs(true);
   if (kSingleSPI)
     SPI.beginTransaction(_spi_settings);
+
+  init();
 }
 
 void Display::init() {

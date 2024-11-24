@@ -148,7 +148,6 @@ UI::Menu{"Main Menu", {
 void Core::boot() {
     // ESP_LOGE("", "boot %lu", micros());
 
-    mDisplay.init();
 
     if (kSettings.mValid) {
         // Recover Settings from Disk // TODO
