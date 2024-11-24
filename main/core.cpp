@@ -221,6 +221,7 @@ void Core::boot() {
             // case 3: break;
         }
         #undef ARGS
+        Light::off(); // Always turn off light exiting the Menus
     } else {
         kSettings.mWatchface.mLastDraw.mValid = false;
         std::visit([&](auto& e){
