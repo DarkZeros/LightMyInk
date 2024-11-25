@@ -2,6 +2,7 @@
 
 #include "display.h"
 #include "battery.h"
+#include "time.h"
 #include <TimeLib.h>
 #include "ui.h"
 
@@ -33,6 +34,14 @@ struct WatchfaceSettings {
         uint8_t mMinuteU[2]{}, mMinuteD{}; // Front and back buffers for Units
         uint8_t mStore[128]{}; // Scratch data the Watchfaces want to store
     } mLastDraw;
+
+    struct {
+        // TODO Move me inside watchface belonging to
+        bool mBattery {true};
+        bool mMoon {true};
+        bool mSun {true};
+        bool mTides {false};
+    } mConfig;
 };
 
 /* This class handles the Draw of the display watchface
@@ -46,6 +55,7 @@ protected:
     } mSettings;
     Display& mDisplay;
     const Battery& mBattery;
+    const Time& mTime;
     const tmElements_t& mNow;
 
     // Needs to implement minute uni/dec draw & return Rect coordinates
@@ -66,10 +76,12 @@ public:
         WatchfaceSettings& watchSet,
         Display& display, 
         const Battery& battery,
+        const Time& time,
         const tmElements_t& now)
     : mSettings{dispSet, watchSet}
     , mDisplay{display}
     , mBattery(battery)
+    , mTime(time)
     , mNow(now)
     {}
 

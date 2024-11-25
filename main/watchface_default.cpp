@@ -8,8 +8,45 @@
 #include "fonts/DSEG7_Classic_Regular_39.h"
 #include "icons.h"
 
+double JulianDateFromUnixTime(uint64_t t){
+	//Not valid for dates before Oct 15, 1582
+	return (t / 86'400.0) + 2440587.5;
+}
+
+double mod360(double d){
+    double t = std::fmod(d, 360.0);
+    if(t<0){t+=360;}
+    return t;
+}
+
+double getIlluminatedFractionOfMoon(uint64_t t){
+    const double jd = JulianDateFromUnixTime(t);
+    const double toRad = PI/180.0;
+    const double T=(jd-2451545)/36525.0;
+
+    const auto D = mod360(297.8501921 + 445267.1114034*T - 0.0018819*T*T + 1.0/545868.0*T*T*T - 1.0/113065000.0*T*T*T*T)*toRad; //47.2
+    const auto M = mod360(357.5291092 + 35999.0502909*T - 0.0001536*T*T + 1.0/24490000.0*T*T*T)*toRad; //47.3
+    const auto Mp = mod360(134.9633964 + 477198.8675055*T + 0.0087414*T*T + 1.0/69699.0*T*T*T - 1.0/14712000.0*T*T*T*T)*toRad; //47.4
+
+    // const auto i=mod360(0 - D*180/PI - 6.289 * sin(Mp) + 2.1 * sin(M) -1.274 * sin(2*D - Mp) -0.658 * sin(2*D) -0.214 * sin(2*Mp) -0.11 * sin(D))*toRad;
+
+    // const auto k=(1 + cos(i))/2;
+    // const auto r = std::fmod(-i / PI / 2 * 100 + 100, 100.f);
+
+    //48.4
+    const auto i=mod360(180 - D*180/PI - 6.289 * sin(Mp) + 2.1 * sin(M) -1.274 * sin(2*D - Mp) -0.658 * sin(2*D) -0.214 * sin(2*Mp) -0.11 * sin(D))*toRad;
+
+    const auto k=(1 + cos(i))/2;
+    if (i > PI)
+      return 100-k*50;
+    // ESP_LOGE("moon", "r %f, i %f k %f, t %lld, jd %f", r, i, k, t, jd);
+    return k * 50;
+}
+
 std::vector<Rect> DefaultWatchface::render() {
   std::vector<Rect> rects;
+
+  auto& config = mSettings.mWatchface.mConfig;
 
   auto& last = mSettings.mWatchface.mLastDraw;
   const auto& redraw = !last.mValid;
@@ -29,16 +66,22 @@ std::vector<Rect> DefaultWatchface::render() {
     mDisplay.setFont(&DSEG7_Classic_Bold_53);
     mDisplay.setCursor(92,73);
     mDisplay.print(':');
-    rects.emplace_back(92, 0, 10, 53);
+    rects.emplace_back(92, 30, 12, 35);
   }
 
-  // Hour
+  // Hour / Moon
   if (redraw || store.mHour != mNow.Hour) {
     store.mHour = mNow.Hour;
     mDisplay.setFont(&DSEG7_Classic_Bold_53);
     mDisplay.setCursor(4, 73);
     mDisplay.printf("%02d", mNow.Hour);
-    rects.emplace_back(4, 20, 80, 53);
+    rects.emplace_back(7, 20, 80, 53);
+
+    // Moon
+    if (config.mMoon) {
+      drawMoon(getIlluminatedFractionOfMoon(mTime.getTimeval().tv_sec), 50, 150, 30, 1, 0);
+      rects.emplace_back(15, 115, 70, 70);
+    }
   }
 
   // Date
@@ -66,17 +109,17 @@ std::vector<Rect> DefaultWatchface::render() {
     mDisplay.setCursor(x + 110, y+1);
     mDisplay.println(tmYearToCalendar(mNow.Year));// offset from 1970, since year is stored in uint8_t
 
-    rects.emplace_back(0, 75, 200, 24);
+    rects.emplace_back(0, 80, 200, 20);
   }
 
   // Battery
-  if (redraw || store.mBattery != mBattery.mCurPercent) {
+  if (config.mBattery && (redraw || store.mBattery != mBattery.mCurPercent)) {
     store.mBattery = mBattery.mCurPercent;
     mDisplay.setFont(NULL);
-    mDisplay.setCursor(68, 120);
-    mDisplay.setTextSize(2);
+    mDisplay.setCursor(85, 105);
+    mDisplay.setTextSize(1);
     mDisplay.printf("%.1f%%", mBattery.mCurPercent * 0.1);
-    rects.emplace_back(68, 110, 60, 30);
+    rects.emplace_back(75, 102, 45, 14);
   }
 
   return rects;
@@ -92,6 +135,99 @@ void DefaultWatchface::drawU(uint8_t d){
   mDisplay.setFont(&DSEG7_Classic_Bold_53);
   mDisplay.setCursor(148, 73);
   mDisplay.println(d);
+}
+
+
+
+std::vector<std::pair<uint8_t, uint8_t>> calcEllipse(int x, int y, uint8_t width, uint8_t height)
+{
+    int x1 = -width, y1 = 0; // II quadrant from bottom left to top right
+    int e2 = height, dx = (1 + 2 * x1) * e2 * e2; // error increment
+    int dy = x1 * x1, err = dx + dy; // error of 1 step
+
+    std::vector<std::pair<uint8_t, uint8_t>> lines;
+    lines.reserve(height);
+
+    do {
+        e2 = 2 * err;
+
+        if (e2 >= dx) {
+            x1++;
+            err += dx += 2 * height * height;
+        } // x1 step
+
+        if (e2 <= dy) {
+            // Whenever we advance to next line we print the previous line
+            lines.emplace_back(y1, -x1);
+            y1++;
+            err += dy += 2 * width * width;
+        } // y1 step
+    } while (x1 <= 0);
+
+    // -> finish tip of ellipse ?
+    // display.drawLine(x, y - y1, x, y + y1, on);
+    return lines;
+}
+
+void DefaultWatchface::drawEllipse(int x, int y, uint8_t width, uint8_t height, uint16_t on)
+{
+    for (auto& [y1, x1] : calcEllipse(x, y, width, height)) {
+        mDisplay.drawLine(x + x1, y - y1, x - x1, y - y1, on);
+        mDisplay.drawLine(x + x1, y + y1, x - x1, y + y1, on);
+    }
+}
+
+void DefaultWatchface::drawEllipseDifference(int x, int y, uint8_t width1, uint8_t width2, uint8_t height, bool big, uint16_t color)
+{
+    auto elipse1 = calcEllipse(x, y, width1, height);
+    auto elipse2 = calcEllipse(x, y, width2, height);
+
+    for (auto i = 0; i < elipse1.size(); i++) {
+        auto& [y11, x11] = elipse1[i];
+        auto& [y12, x12] = elipse2[i];
+        // ESP_LOGE("", "%d %d %d %d", y11, y12, x11, x12);
+        if (big) {
+            mDisplay.drawLine(x - x11, y - y11, x + x12, y - y11, color);
+            mDisplay.drawLine(x - x11, y + y11, x + x12, y + y11, color);
+        } else {
+            mDisplay.drawLine(x + x11, y - y11, x + x12, y - y11, color);
+            mDisplay.drawLine(x + x11, y + y11, x + x12, y + y11, color);
+        }
+    }
+}
+
+void DefaultWatchface::drawMoonFast(float p, int x, int y, uint8_t r, uint16_t on, uint16_t off)
+{
+  if (p < 25)
+    drawEllipseDifference(x, y, r * (25 - p) / 25, r, r, false, off);
+  else if (p < 50)
+    drawEllipseDifference(x, y, r * (p - 25) / 25, r, r, true, off);
+  else if (p < 75)
+    drawEllipseDifference(x, y, r, r * (75 - p) / 25, r, true, off);
+  else
+    drawEllipseDifference(x, y, r, r * (p - 75) / 25, r, false, off);
+}
+
+void DefaultWatchface::drawMoon(float p, uint16_t x, uint16_t y, uint16_t radius, uint16_t on, uint16_t off) 
+{
+  mDisplay.drawCircle(x, y, radius + 2, on);
+  mDisplay.drawCircle(x, y, radius + 3, off);
+
+  //drawEllipseDifference(x, y, radius * (25 - p) / 25, radius, radius, radius, on);
+  
+  mDisplay.startWrite();
+  mDisplay.fillCircleHelper(x, y, radius, p < 50 ? 2 : 1, 0, on);
+  mDisplay.fillCircleHelper(x, y, radius, p < 50 ? 1 : 2, 0, off);
+  mDisplay.endWrite();
+  
+  if (p < 25)
+    drawEllipse(x, y, radius * (25 - p) / 25, radius, on);
+  else if (p < 50)
+    drawEllipse(x, y, radius * (p - 25) / 25, radius, off);
+  else if (p < 75)
+    drawEllipse(x, y, radius * (75 - p) / 25, radius, off);
+  else
+    drawEllipse(x, y, radius * (p - 75) / 25, radius, on);
 }
 
 

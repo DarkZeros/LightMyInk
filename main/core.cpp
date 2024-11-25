@@ -68,13 +68,18 @@ UI::Menu{"Main Menu", {
             }
         }},
         UI::Menu{"Alarms", {
+
         }},
     }},
     UI::Menu{"Watchface", {
-        UI::Loop<int>{"Style",
-            [] -> int { return kSettings.mWatchface.mType; },
-            []{ kSettings.mWatchface.mType = (kSettings.mWatchface.mType + 1) % 4; }
-        },
+        // UI::Loop<int>{"Style",
+        //     []() -> int { return kSettings.mWatchface.mType; },
+        //     [](){ kSettings.mWatchface.mType = (kSettings.mWatchface.mType + 1) % 4; }
+        // },
+        UI::RefBool{"Show Battery %", kSettings.mWatchface.mConfig.mBattery},
+        UI::RefBool{"Moon Phases", kSettings.mWatchface.mConfig.mMoon},
+        UI::RefBool{"Sunset/Sunrise", kSettings.mWatchface.mConfig.mSun},
+        UI::RefBool{"Tides", kSettings.mWatchface.mConfig.mTides},
     }},
     UI::Menu{"Display", {
         UI::Bool{"Invert",
@@ -96,6 +101,16 @@ UI::Menu{"Main Menu", {
         UI::Loop<DisplayMode>{"Watch Lut",
             [] -> DisplayMode { return kSettings.mDisplay.mWatchLut; },
             []{ kSettings.mDisplay.mWatchLut = (DisplayMode)((kSettings.mDisplay.mWatchLut + 1) % 3); }
+        },
+    }},
+    UI::Menu{"Power Save", {
+        UI::Bool{"Night (0-6am)",
+            [](){return kSettings.mPowerSave.mNight; },
+            [](bool val){ kSettings.mPowerSave.mNight = val; }
+        },
+        UI::Bool{"Auto (bat <25%)",
+            [](){return kSettings.mPowerSave.mAuto; },
+            [](bool val){ kSettings.mPowerSave.mAuto = val; }
         },
     }},
 
@@ -232,7 +247,7 @@ void Core::boot() {
     // Show watch face or menu ?
     if (kSettings.mUi.mDepth < 0) {
         mDisplay.setRefreshMode(kSettings.mDisplay.mWatchLut);
-        #define ARGS kSettings.mDisplay, kSettings.mWatchface, mDisplay, mBattery, mNow
+        #define ARGS kSettings.mDisplay, kSettings.mWatchface, mDisplay, mBattery, mTime, mNow
         // Instantiate the watchface type we are using
         switch(kSettings.mWatchface.mType) {
             default: DefaultWatchface(ARGS).draw(); break;
@@ -379,15 +394,18 @@ void Core::deepSleep() {
 
     // Calculate stepsize based on battery level or on battery save mode
     auto stepSize = [&] {
-        if (mBattery.mCurPercent < 100 || mNow.Hour < 7) { // TODO: Proper power save night mode
+        if (kSettings.mPowerSave.mNight && mNow.Hour < 7)
+            return 5;
+        if (!kSettings.mPowerSave.mAuto)
+            return 1;
+        if (mBattery.mCurPercent < 100) {
             return 5;
         } else if (mBattery.mCurPercent < 200) {
             return 4;
         } else if (mBattery.mCurPercent < 500) {
             return 2;
-        } else {
-            return 1;
         }
+        return 1;
     }();
 
     // TODO: When there is an alarm, we need to wake up earlier

@@ -25,5 +25,10 @@ struct Settings {
     BatterySettings mBattery;
     DisplaySettings mDisplay;
     WatchfaceSettings mWatchface;
+
+    struct PowerSave {
+        bool mNight {false};
+        bool mAuto {true};
+    } mPowerSave;
 };
 extern struct Settings kSettings;
