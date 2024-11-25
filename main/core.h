@@ -29,6 +29,8 @@ private:
     Battery mBattery;
     Touch mTouch;
 
+    std::vector<std::future<void>> mTasks;
+
     const tmElements_t& mNow;
     const UI::Any mUi;
 };

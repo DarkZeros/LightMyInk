@@ -46,8 +46,6 @@ public:
 
   static const SPISettings _spi_settings;
 
-  std::queue<std::packaged_task<void(void)>> mTasks;
-
   Display();
 
   void init();

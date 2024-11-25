@@ -18,8 +18,7 @@ void Peripherals::vibrator(std::vector<int> pattern) {
 
   for(auto i = 0; i < pattern.size(); i++) {
     gpio_set_level((gpio_num_t)HW::kVibratorPin, i % 2 ? 0 : 1);
-    esp_sleep_enable_timer_wakeup(pattern[i] * 1000);
-    esp_light_sleep_start();
+    delay(pattern[i]);
   }
   gpio_set_level((gpio_num_t)HW::kVibratorPin, 0);
 }
@@ -99,8 +98,7 @@ void Peripherals::speaker(std::vector<std::pair<int, int>> pattern) {
 
   for(auto& [note, duration] : pattern) {
     speaker.set(note);
-    esp_sleep_enable_timer_wakeup(duration * 1000);
-    esp_light_sleep_start();
+    delay(duration);
   }
 }
 
@@ -265,11 +263,9 @@ void Peripherals::tetris() {
 
     // we only play the note for 90% of the duration, leaving 10% as a pause
     speaker.set(melody[thisNote]);
-    esp_sleep_enable_timer_wakeup(noteDuration * 900);
-    esp_light_sleep_start();
+    delay(noteDuration * 0.9);
 
     speaker.set(0);
-    esp_sleep_enable_timer_wakeup(noteDuration * 100);
-    esp_light_sleep_start();
+    delay(noteDuration * 0.1);
   }
 }

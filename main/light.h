@@ -12,5 +12,5 @@ struct Light {
     static void RTC_IRAM_ATTR off() { set(false); }
     static bool RTC_IRAM_ATTR toggle();
     static void RTC_IRAM_ATTR set(bool high);
-    static void onFor(uint32_t us);
+    static void onFor(uint32_t ms);
 };

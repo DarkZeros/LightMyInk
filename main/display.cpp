@@ -75,12 +75,7 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   // Reset HW / Exit Deep Sleep
   gpio_set_level((gpio_num_t)HW::DisplayPin::Res, LOW);
   pinMode(HW::DisplayPin::Res, OUTPUT);
-  delay(1); // TODO: Use a timer light sleep
-  // delayMicroseconds(100);
-  // Maybe is not worth? Docs say 350us to sleep and 500us wake up
-  // esp_sleep_enable_timer_wakeup( 1 * 1000);
-  // esp_light_sleep_start();
-  // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+  delay(1);
   pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
 
   SPI.begin(HW::DisplayPin::Sck, -1, HW::DisplayPin::Mosi, kCsHw ? HW::DisplayPin::Cs : -1);
@@ -256,8 +251,6 @@ void isr(void* ) {
 
 
 void Display::waitWhileBusy() {
-  //ESP_LOGE("st", "%ld", micros());
-
   sSem = xSemaphoreCreateBinary();
 
   static constexpr gpio_config_t io_conf = {
@@ -277,11 +270,9 @@ void Display::waitWhileBusy() {
   if (xSemaphoreTake(sSem, 10'000 / portTICK_PERIOD_MS) != pdTRUE) {
     ESP_LOGE("displ", "semaphore fired!");
   }
-
+  gpio_wakeup_disable((gpio_num_t)HW::DisplayPin::Busy);
   gpio_isr_handler_remove((gpio_num_t)HW::DisplayPin::Busy);
   vSemaphoreDelete(sSem);
-
-  // ESP_LOGE("done", "%ld", micros());
 }
 
 void Display::setDarkBorder(bool dark) {

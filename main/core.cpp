@@ -23,13 +23,9 @@ UI::Menu{"Main Menu", {
     UI::Menu{"Clock", {
         UI::DateTime{"Set DateTime", mTime},
         UI::Menu{"Calibration", {
-            UI::Action{"Sync", [&](){
-                mTime.calUpdate();
-            }},
-            UI::Action{"Reset", [&](){
-                mTime.calReset();
-            }},
-            UI::Text{[&]() -> std::string {
+            UI::Action{"Sync", [&]{ mTime.calUpdate(); }},
+            UI::Action{"Reset", [&]{ mTime.calReset(); }},
+            UI::Text{[&] -> std::string {
                 if (!kSettings.mTime.mSync)
                     return "\n Not calibrated\n Set Date/Time\n then press Sync";
                 auto& sync = *kSettings.mTime.mSync;
@@ -73,81 +69,88 @@ UI::Menu{"Main Menu", {
     }},
     UI::Menu{"Watchface", {
         UI::Loop<int>{"Style",
-            []() -> int { return kSettings.mWatchface.mType; },
-            [](){ kSettings.mWatchface.mType = (kSettings.mWatchface.mType + 1) % 4; }
+            [] -> int { return kSettings.mWatchface.mType; },
+            []{ kSettings.mWatchface.mType = (kSettings.mWatchface.mType + 1) % 4; }
         },
     }},
     UI::Menu{"Display", {
         UI::Bool{"Invert",
-            [](){return kSettings.mDisplay.mInvert; },
+            []{return kSettings.mDisplay.mInvert; },
             [](bool val){ kSettings.mDisplay.mInvert = val; }
         },
         UI::Bool{"Border",
-            [](){return kSettings.mDisplay.mDarkBorder; },
+            []{return kSettings.mDisplay.mDarkBorder; },
             [](bool val){ kSettings.mDisplay.mDarkBorder = val; }
         },
         UI::Loop<int>{"Rotation",
-            []() -> int { return kSettings.mDisplay.mRotation; },
-            [](){ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
+            [] -> int { return kSettings.mDisplay.mRotation; },
+            []{ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
         },
     }},
 
-    // UI::Menu{"Touch", {}},
-    // UI::Menu{"Test", {
-    //     UI::Action{"Vib 2x75ms", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::vibrator(std::vector<int>{75,75,75});
-    //         }));
-    //     }},
-    //     UI::Action{"Vib 1x75ms", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::vibrator(std::vector<int>{75});
-    //         }));
-    //     }},
-    //     UI::Action{"Vib 200ms", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::vibrator(std::vector<int>{200});
-    //         }));
-    //     }},
-    //     UI::Action{"Scale", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::speaker(std::vector<std::pair<int,int>>{
-    //                 {200,1000},{400,1000},{800,1000},{1600,1000},{3200,1000},
-    //                 {6400,1000},{10000,1000},{12000,1000}});
-    //         }));
-    //     }},
-    //     UI::Action{"Beep", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::speaker(
-    //                 std::vector<std::pair<int,int>>{
-    //                 {3200,100},{0,100},{3200,100}});
-    //         }));
-    //     }},
-    //     UI::Action{"Tetris", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::tetris();
-    //         }));
-    //     }},
-    // }},
-    // UI::Menu{"Test2", {
-    //     UI::Action{"Light 1s", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::light(1'000'000);
-    //         }));
-    //     }},
-    //     UI::Action{"Light 100s", [&](){
-    //         mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-    //             Peripherals::light(100'000'000);
-    //         }));
-    //     }},
-    // }},
+    UI::Menu{"Touch", {}},
+    UI::Menu{"Test", {
+        UI::Action{"Vib 2x75ms", [&]{
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::vibrator(std::vector<int>{75,75,75});
+            }));
+        }},
+        UI::Action{"Vib 1x75ms", [&](){
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::vibrator(std::vector<int>{75});
+            }));
+        }},
+        UI::Action{"Vib 200ms", [&](){
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::vibrator(std::vector<int>{200});
+            }));
+        }},
+        UI::Action{"Beep", [&](){
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::speaker(
+                    std::vector<std::pair<int,int>>{
+                    {3200,100},{0,100},{3200,100}});
+            }));
+        }},
+        UI::Action{"Tetris", [&](){
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::tetris();
+            }));
+        }},
+        UI::Action{"Light 1s", [&]{
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Light::onFor(1'000);
+            }));
+        }},
+        UI::Action{"Light toggle", [&]{
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Light::toggle();
+            }));
+        }},
+        UI::Action{"Parallel All", [&](){
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::tetris();
+            }));
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                for (auto i=0; i<10; i++) {
+                    delay(1300);
+                    Peripherals::vibrator(std::vector<int>{70});
+                }
+            }));
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                for (auto i=0; i<30; i++) {
+                    delay(1000);
+                    Light::toggle();
+                }
+            }));
+        }},
+    }},
 }}}
 {
 }
 
 void Core::boot() {
     // ESP_LOGE("", "boot %lu", micros());
-
 
     if (kSettings.mValid) {
         // Recover Settings from Disk // TODO
@@ -187,7 +190,7 @@ void Core::boot() {
         && mNow.Hour <= kSettings.mHourly.mEnd)
     {
         if (kSettings.mHourly.mBeep) {
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
+            mTasks.emplace_back(std::async(std::launch::async, []{
                 Peripherals::speaker(
                     std::vector<std::pair<int,int>>{
                     {3200,100},{0,100},{3200,500}
@@ -195,8 +198,8 @@ void Core::boot() {
             }));
         }
         if (kSettings.mHourly.mVib) {
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Peripherals::vibrator(std::vector<int>{75,75,75});
+            mTasks.emplace_back(std::async(std::launch::async, []{
+                Peripherals::vibrator(std::vector<int>{50,75,50});
             }));
         }
     }
@@ -234,6 +237,10 @@ void Core::boot() {
             }
         }, findUi());
     }
+    // Finish display, setup touch and finish pending tasks
+    mDisplay.hibernate();
+    mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
+    mTasks.clear();
 
     deepSleep();
 }
@@ -279,9 +286,7 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
     // Button press on the watchface
     if (ui.mDepth < 0) {
         if (btn == Touch::Light) {
-            mDisplay.mTasks.push(std::packaged_task<void(void)>([](){
-                Light::toggle();
-            }));
+            Light::toggle();
         } else if (btn == Touch::Menu) {
             ui.mDepth = 0;
         }
@@ -332,8 +337,6 @@ void Core::handleTouch(const touch_pad_t touch_pad) {
 }*/
 
 void Core::deepSleep() {
-    mDisplay.hibernate();
-
     if (!kSettings.mLeakPinsSet) {
         kSettings.mLeakPinsSet = true;
 
@@ -352,12 +355,10 @@ void Core::deepSleep() {
         }
     }
 
-    mTouch.setUp(kSettings.mUi.mDepth < 0); // Takes 0.3ms -> 10uAs
-
     // ESP_LOGE("deepSleep", "%ld", micros());
 
     // Calculate stepsize based on battery level or on battery save mode
-    auto stepSize = [&]() {
+    auto stepSize = [&] {
         if (mBattery.mCurPercent < 100 || mNow.Hour < 7) { // TODO: Proper power save night mode
             return 5;
         } else if (mBattery.mCurPercent < 200) {

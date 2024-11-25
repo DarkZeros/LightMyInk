@@ -16,10 +16,9 @@ namespace {
 #include "rom/gpio.h"
 #include "deep_sleep_utils.h"
 
-void Light::onFor(uint32_t us) {
+void Light::onFor(uint32_t ms) {
   on();
-  esp_sleep_enable_timer_wakeup(us);
-  esp_light_sleep_start();
+  delay(ms);
   off();
 }
 
