@@ -1,5 +1,6 @@
 #include "peripherals.h"
 #include "hardware.h"
+#include "power.h"
 
 #include "driver/gpio.h"
 #include "Arduino.h"
@@ -50,9 +51,11 @@ struct Speaker {
         }
     };
     ledc_channel_config(&ledc_channel);
+    Power::lock();
   }
   ~Speaker() {
     stop();
+    Power::unlock();
   }
 
   // Select resolution based on the frequency values, not to overflow or underflow divisor
