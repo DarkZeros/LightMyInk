@@ -2,6 +2,8 @@
 #include "settings.h"
 #include "display.h"
 
+#include "esp_log.h"
+
 namespace {
     auto& ui = kSettings.mUi;
     void updownUiState(int add, int size) {
@@ -107,11 +109,13 @@ void DateTime::button_updown(int v) const{
     auto cur = mTime.getElements();
     auto curCast = reinterpret_cast<uint8_t *>(&cur);
     auto& val = curCast[std::get<3>(kDateTime[selected])];
-    if (val == 0 && v == -1)
+    if (val == 0 && v == -1) {
         val = std::get<4>(kDateTime[selected]);
-    else
+    } else {
         val += v;
-    mTime.setTime(makeTime(cur));
+    }
+    // Calculate diff and set that adjustment
+    mTime.adjustTime(static_cast<int32_t>(makeTime(cur)) - mTime.getTimeval().tv_sec);
 }
 void DateTime::render(Display& mDisplay) const {
     renderHeader(mDisplay, baseName);

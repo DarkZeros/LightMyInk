@@ -37,7 +37,7 @@ public:
     explicit Time(TimeSettings& settings) : mSettings{settings} {readTime();};
 
     void readTime();
-    void setTime(const timeval&);
+    void setTime(const timeval);
     // Wrappers
     void adjustTime(const timeval& time);
     void adjustTime(const int32_t& seconds);

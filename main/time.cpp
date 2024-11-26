@@ -28,16 +28,12 @@ void Time::setTime(const tmElements_t& elements) {
     setTime(makeTime(elements));
 }
 
-void Time::setTime(const time_t& seconds) {
-    struct timeval time{seconds, 0};
-    setTime(time);
-}
-
-void Time::setTime(const timeval& tm) {
+void Time::setTime(const timeval tm) {
     gettimeofday(&mTv, NULL); // redundant? Maybe 2ms drift?
     // Store difference in drift
-    if (mSettings.mSync) {
-        mSettings.mSync->mDrift.tv_sec += tm.tv_sec - mTv.tv_sec;
+    if (auto& sync = mSettings.mSync) {
+        sync->mDrift.tv_sec += tm.tv_sec - mTv.tv_sec;
+        sync->mDrift.tv_usec += tm.tv_usec - mTv.tv_usec;
     }
     // Set it and update times
     settimeofday(&tm, NULL);
