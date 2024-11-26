@@ -88,7 +88,8 @@ UI::Menu{"Main Menu", {
         },
     }},
 
-    UI::Menu{"Touch", {}},
+    UI::Menu{"Touch", {
+    }},
     UI::Menu{"Test", {
         UI::Action{"Vib 2x75ms", [&]{
             mTasks.emplace_back(std::async(std::launch::async, []{

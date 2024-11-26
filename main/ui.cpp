@@ -8,7 +8,7 @@ namespace {
         ui.mState[ui.mDepth] = (ui.mState[ui.mDepth] + size + add) % size;
     }
     int curIndex(std::size_t size) {
-        return (ui.mState[ui.mDepth] + size) % size;
+        return (ui.mState[ui.mDepth] + size) % std::max(1u, size);
     }
 
     void renderHeader(Display& mDisplay, const std::string& name, size_t size = 2) {
@@ -29,6 +29,8 @@ namespace {
 namespace UI {
 
 void Sub::button_menu() const {
+    if (items.empty())
+        return;
     auto& item = items[index()];
     std::visit([&](auto& e) {
         if constexpr (has_capture_input<decltype(e)>::value) {
