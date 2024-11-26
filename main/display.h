@@ -10,18 +10,24 @@
 #pragma once
 
 #include <Adafruit_GFX.h>
-#include <future>
-#include <queue>
 
 #include "hardware.h"
 
 #include "lut.h"
+
+enum DisplayMode {
+  FULL,
+  FAST,
+  CUSTOM,
+};
 
 struct DisplaySettings {
   // Settings that can be changed
   bool mInvert : 1 {false};
   bool mDarkBorder : 1 {false};
   uint8_t mRotation : 2 {2};
+  DisplayMode mMenuLut : 2 {FAST};
+  DisplayMode mWatchLut : 2 {CUSTOM};
 };
 
 struct Rect {
@@ -36,7 +42,6 @@ public:
   static constexpr bool kSingleSPI = false; // Assumes only display uses SPI
   static constexpr bool kCsHw = true; // Gives the SPI driver the Cs control
   static constexpr bool kOverdriveSPI = false; // Uses a 25% faster SPI out of spec
-  static constexpr bool kCustomLut = true; // Uses a custom LUT in the driver
 
   static constexpr uint8_t WIDTH = 200;
   static constexpr uint8_t HEIGHT = WIDTH;
@@ -69,20 +74,22 @@ public:
   void setDarkBorder(bool darkBorder);
   void setInverted(bool inverted);
 
-  void setRefreshMode(bool partial); // To leave the mode in a known state
-  void refresh(bool partial = true);
+  void setRefreshMode(DisplayMode mode);
+  void refresh();
   void hibernate();
   void waitWhileBusy();
   void writeRect(Rect rect);
   void writeAlignedRect(const Rect& rect);
   void writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect);
   void writeAll(bool backBuffer = false);
-  void writeAllAndRefresh(bool partial = true);
+  void writeAllAndRefresh();
 
 private:
   // Called internally in middle of transfer
   void _setRamArea(const Rect& rect);
-  void _setRefreshMode(bool partial);
+  void _setRefreshMode(const DisplayMode& mode);
+  void _setCustomLut(const DisplayMode& mode);
+  void _loadRomLut(const DisplayMode& mode);
 
   // SPI transfer methods
   void _startTransfer();

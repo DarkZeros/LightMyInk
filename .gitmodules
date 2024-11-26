@@ -26,3 +26,6 @@
 [submodule "ArduinoNvs"]
 	path = components/ArduinoNvs/ArduinoNvs
 	url = https://github.com/DarkZeros/ArduinoNvs
+[submodule "components/magic_enum/magic_enum"]
+	path = components/magic_enum/magic_enum
+	url = https://github.com/Neargye/magic_enum.git

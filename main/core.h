@@ -1,5 +1,8 @@
 #pragma once
 
+#include <future>
+#include <vector>
+
 #include "display.h"
 #include "watchface.h"
 #include "battery.h"

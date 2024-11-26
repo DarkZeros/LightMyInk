@@ -86,6 +86,14 @@ UI::Menu{"Main Menu", {
             [] -> int { return kSettings.mDisplay.mRotation; },
             []{ kSettings.mDisplay.mRotation = (kSettings.mDisplay.mRotation + 1) % 4; }
         },
+        UI::Loop<DisplayMode>{"Menu Lut",
+            [] -> DisplayMode { return kSettings.mDisplay.mMenuLut; },
+            []{ kSettings.mDisplay.mMenuLut = (DisplayMode)((kSettings.mDisplay.mMenuLut + 1) % 3); }
+        },
+        UI::Loop<DisplayMode>{"Watch Lut",
+            [] -> DisplayMode { return kSettings.mDisplay.mWatchLut; },
+            []{ kSettings.mDisplay.mWatchLut = (DisplayMode)((kSettings.mDisplay.mWatchLut + 1) % 3); }
+        },
     }},
 
     UI::Menu{"Touch", {
@@ -214,6 +222,7 @@ void Core::boot() {
 
     // Show watch face or menu ?
     if (kSettings.mUi.mDepth < 0) {
+        mDisplay.setRefreshMode(kSettings.mDisplay.mWatchLut);
         #define ARGS kSettings.mDisplay, kSettings.mWatchface, mDisplay, mBattery, mNow
         // Instantiate the watchface type we are using
         switch(kSettings.mWatchface.mType) {
@@ -226,6 +235,7 @@ void Core::boot() {
         #undef ARGS
         Light::off(); // Always turn off light exiting the Menus
     } else {
+        mDisplay.setRefreshMode(kSettings.mDisplay.mMenuLut);
         kSettings.mWatchface.mLastDraw.mValid = false;
         std::visit([&](auto& e){
             if constexpr (has_render<decltype(e), Display&>::value) {

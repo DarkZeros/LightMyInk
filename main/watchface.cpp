@@ -106,8 +106,6 @@ void Watchface::draw() {
     // change it next update, saving a few 300 * 8 * 0.05us = >106us = 200us;
   }
 
-  // Set the display to partial always
-  mDisplay.setRefreshMode(true);
 
   // Store the values for next round
   last.mValid = true;

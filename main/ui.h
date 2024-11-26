@@ -6,6 +6,9 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
+#include "display.h"
+
+#include <magic_enum.hpp>
 
 struct UiSettings {
     std::array<uint8_t, 4> mState{}; // Up to 4 levels deep (increase if needed)
@@ -75,7 +78,12 @@ struct Loop : public Name {
     std::function<T()> get;
     std::function<void()> tick;
 
-    std::string name() const { return std::to_string(get()) + " " + baseName; }
+    std::string name() const requires (!std::is_enum_v<T>) {
+        return std::to_string(get()) + " " + baseName;
+    }
+    std::string name() const requires (std::is_enum_v<T>) {
+        return std::string(magic_enum::enum_name(get())) + " " + baseName;
+    }
     void button_menu() const {tick();}
 };
 
@@ -122,6 +130,7 @@ using Any = std::variant<
     Sub,
     Action,
     Loop<int>,
+    Loop<DisplayMode>,
     Bool,
     RefBool,
     Number,

@@ -9,6 +9,7 @@ set(requires
     ArduinoNvs
     GfxLibrary
     Time
+    magic_enum
 )
 
 set(privrequires

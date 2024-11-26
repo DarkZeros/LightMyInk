@@ -15,11 +15,12 @@
 // we can remember them and avoid expensive SPI calls
 static RTC_DATA_ATTR struct DisplayState {
   bool initialized : 1 {false};
-  bool backBufferValid : 1 {false};
+  bool fullMode : 1 {false};
+  bool firstRefreshDone : 1 {false};
   bool darkBorder : 1 {false};
   bool inverted : 1 {false};
   bool postInvert : 1 {false};
-  bool partial : 1 {false};
+  DisplayMode mode : 2 {DisplayMode::FAST};
 } kState;
 
 const SPISettings Display::_spi_settings{kOverdriveSPI ? 26'666'666 : 20'000'000, MSBFIRST, SPI_MODE0};
@@ -57,9 +58,6 @@ void Display::_transferCommand(uint8_t c)
 }
 
 Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
-  // Display requires ISR service for busy pin
-  gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1);
-
   // Set pins
   if (!kCsHw)
     pinMode(HW::DisplayPin::Cs, OUTPUT);
@@ -79,10 +77,14 @@ Display::Display() : Adafruit_GFX(WIDTH, HEIGHT) {
   pinMode(HW::DisplayPin::Res, INPUT_PULLUP);
 
   SPI.begin(HW::DisplayPin::Sck, -1, HW::DisplayPin::Mosi, kCsHw ? HW::DisplayPin::Cs : -1);
-  if (kCsHw)
+  if constexpr (kCsHw)
     SPI.setHwCs(true);
-  if (kSingleSPI)
+  if constexpr (kSingleSPI)
     SPI.beginTransaction(_spi_settings);
+
+  // Display requires ISR service for busy pin
+  gpio_intr_disable((gpio_num_t)HW::DisplayPin::Busy);
+  gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1);
 
   init();
 }
@@ -122,48 +124,52 @@ void Display::init() {
     _transfer(0x00);
   }
 
-  // Custom LUT?
-  if (kCustomLut) {
-    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FULL_REFRESH;
-    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH;
-    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH_KEEP;
-    auto& lut = watchLut;
-
-    /* Always write main part of LUT register */
-    _transferCommand(0x32);
-    _transfer(lut.get().data(), 153);
-    // End Option (EOPT)
-    if (lut.eopt) {
-      _transferCommand(0x3F); // set Lut option End
-      _transfer(*lut.eopt);
-    }
-    /* GATE_DRIVING_VOLTAGE */
-    if (lut.vgh) {
-      _transferCommand(0x03);
-      _transfer(*lut.vgh);
-    }
-    /* SRC_DRIVING_VOLTAGE */
-    if (lut.vsh1_vsh2_vsl) {
-      _transferCommand(0x04);
-      _transfer(lut.vsh1_vsh2_vsl->data(), 3);
-    }
-    /* SET_VCOM_REG */
-    if (lut.vcom) {
-      _transferCommand(0x2c);
-      _transfer(*lut.vcom);
-    }
-  }
-
   // setRamAdressMode
   _transferCommand(0x11); // set ram entry mode
   _transfer(0b11);  //  0bYX adress mode (+1/-0), Default 0b11
 
-  // Set initial refresh mode
-  kState.partial = true; // Set it to force the first call
-  _setRefreshMode(false);
-
+  // Set initial refresh mode, will not change until first refresh
+  _setRefreshMode(FULL);
   _endTransfer();
+
   kState.initialized = true;
+}
+
+void Display::_setCustomLut(const DisplayMode& mode) {
+  auto& lut = [&] -> const LUT& {
+    if (mode == CUSTOM) {
+      return watchLut;
+    }
+    return watchLut;
+    // Other possible LUTS to implement
+    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FULL_REFRESH;
+    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH;
+    // auto& lut = SSD1681_WAVESHARE_1IN54_V2_LUT_FAST_REFRESH_KEEP;
+  }();
+
+  /* Always write main part of LUT register */
+  _transferCommand(0x32);
+  _transfer(lut.get().data(), 153);
+  // End Option (EOPT)
+  if (lut.eopt) {
+    _transferCommand(0x3F); // set Lut option End
+    _transfer(*lut.eopt);
+  }
+  /* GATE_DRIVING_VOLTAGE */
+  if (lut.vgh) {
+    _transferCommand(0x03);
+    _transfer(*lut.vgh);
+  }
+  /* SRC_DRIVING_VOLTAGE */
+  if (lut.vsh1_vsh2_vsl) {
+    _transferCommand(0x04);
+    _transfer(lut.vsh1_vsh2_vsl->data(), 3);
+  }
+  /* SET_VCOM_REG */
+  if (lut.vcom) {
+    _transferCommand(0x2c);
+    _transfer(*lut.vcom);
+  }
 }
 
 void Display::_setRamArea(const Rect& rect){
@@ -183,53 +189,81 @@ void Display::_setRamArea(const Rect& rect){
   //_transfer(0); // No need to write this, default is 0
 }
 
-void Display::setRefreshMode(bool partial)
+void Display::setRefreshMode(DisplayMode mode)
 {
-  if (kState.partial == partial)
+  if (kState.mode == mode)
+    return;
+  kState.mode = mode;
+
+  // Can´t change the refresh mode until first frame is rendered
+  if (!kState.firstRefreshDone)
     return;
 
   _startTransfer();
-  _setRefreshMode(partial);
+  _setRefreshMode(mode);
   _endTransfer();
 }
 
-void Display::_setRefreshMode(bool partial)
+void Display::_setRefreshMode(const DisplayMode& mode)
 {
-  if (kState.partial == partial)
-    return;
-
-  //1xxxxxx1 // Enable Disable clock
-  //x1xxxx1x // Enable disable analog
-  //xx1xxxxx // Load temp
-  //xxx1xxxx // Load LUT
-  //xxxx1xxx // Display mode 2
-  //xxxxx1xx // Display! 
-
-  constexpr auto kTurnOnLoadLutDisplay = 0b11000100 | (kCustomLut ? 0x0 : 0b10000);
+  constexpr auto kTurnOn = 0b11000000; // Enables oscillator & analog
   constexpr auto kLoadTemp = 0b00100000;
+  constexpr auto kLoadLut = 0b00010000;
   constexpr auto kPartialMode = 0b00001000;
+  constexpr auto kDisplay = 0b00000100;
+  // constexpr auto kTurnOff = 0b00000011; // Disables oscillator & analog
 
-  uint8_t updateCommand = kTurnOnLoadLutDisplay;
+  // Default modes FAST/FULL are loaded from the ROM
+  bool romLut = mode == DisplayMode::FULL || mode == DisplayMode::FAST;
+
+  // Build default updateCommand
+  uint8_t updateCommand = kTurnOn;
+  if (romLut) {
+    updateCommand |= kLoadLut;
+  } else {
+    _setCustomLut(mode);
+  }
+  if (mode != DisplayMode::FULL) {
+    updateCommand |= kPartialMode;
+  }
   if (!kFastUpdateTemp) {
     updateCommand |= kLoadTemp;
   }
-  if (partial) {
-    updateCommand |= kPartialMode;
+
+  // If we are chaging from FULL to FAST/CUSTOM need to set
+  // the display into 2 buffer mode again by triggering an update
+  if ((mode == DisplayMode::FULL) ^ kState.fullMode) {
+    _transferCommand(0x22);
+    _transfer(updateCommand);
+    _transferCommand(0x20);
+    _endTransfer();
+    waitWhileBusy();
+    _startTransfer();
   }
 
   _transferCommand(0x22);
-  _transfer(updateCommand);
-  kState.partial = partial;
+  _transfer(updateCommand | kDisplay);
+  kState.fullMode = mode == DisplayMode::FULL;
 }
 
-void Display::refresh(bool partial)
+void Display::refresh()
 {
+  if (!kState.firstRefreshDone) {
+    // Draw the backbuffer as well on first refresh
+    writeAll(true);
+  }
   _startTransfer();
-  _setRefreshMode(partial);
   _transferCommand(0x20);
   _endTransfer();
 
   waitWhileBusy();
+
+  if (!kState.firstRefreshDone) {
+    _startTransfer();
+    _setRefreshMode(kState.mode);
+    _endTransfer();
+    kState.firstRefreshDone = true;
+  }
 
   // After a refresh, finalize the display inversion
   if (kState.postInvert) {
@@ -245,10 +279,9 @@ SemaphoreHandle_t sSem = NULL;
 
 void isr(void* ) {
   BaseType_t woken;
-  xSemaphoreGiveFromISR(sSem, &woken);
   gpio_isr_handler_remove((gpio_num_t)HW::DisplayPin::Busy);
+  xSemaphoreGiveFromISR(sSem, &woken);
 }
-
 
 void Display::waitWhileBusy() {
   sSem = xSemaphoreCreateBinary();
@@ -268,7 +301,7 @@ void Display::waitWhileBusy() {
   esp_sleep_enable_gpio_wakeup();
 
   if (xSemaphoreTake(sSem, 10'000 / portTICK_PERIOD_MS) != pdTRUE) {
-    ESP_LOGE("displ", "semaphore fired!");
+    ESP_LOGE("displ", "semaphore expired!");
   }
   gpio_wakeup_disable((gpio_num_t)HW::DisplayPin::Busy);
   gpio_isr_handler_remove((gpio_num_t)HW::DisplayPin::Busy);
@@ -288,12 +321,16 @@ void Display::setDarkBorder(bool dark) {
 void Display::setInverted(bool inverted) {
   if (kState.inverted == inverted)
     return;
+  kState.inverted = inverted;
   _startTransfer();
   _transferCommand(0x21); // RAM for Display Update
-  _transfer(inverted ? 0b1000 : 0b10000000); // Only invert the frontbuffer
+  if (kState.firstRefreshDone) {
+    _transfer(inverted ? 0b1000 : 0b10000000); // Only invert the frontbuffer
+    kState.postInvert = true; // Queue the change for backbuffer
+  } else {
+    _transfer(inverted ? 0b10001000 : 0b0); // Set both front/backbuffer
+  }
   _endTransfer();
-  kState.postInvert = true; // Queue the change for backbuffer
-  kState.inverted = inverted;
 }
 
 void Display::rotate(Rect& rect) const
@@ -364,15 +401,11 @@ void Display::writeRect(Rect rect)
   writeAlignedRect(rect);
 }
 
-void Display::writeAllAndRefresh(bool partial)
+void Display::writeAllAndRefresh()
 {
-  if (!kState.backBufferValid) {
-    writeAll(true);
-  }
   writeAll();
-  refresh(kState.backBufferValid ? partial : false);
-  kState.backBufferValid = true;
-}
+  refresh();
+ }
 
 void Display::writeAll(bool backbuffer)
 {
