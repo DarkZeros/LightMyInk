@@ -107,7 +107,7 @@ void Watchface::draw() {
   }
 
   // Set the display to partial always
-  mDisplay.setRefreshMode(true);
+  mDisplay.setRefreshMode(FAST);
 
   // Store the values for next round
   last.mValid = true;

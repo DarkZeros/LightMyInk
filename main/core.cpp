@@ -150,6 +150,8 @@ UI::Menu{"Main Menu", {
 {
 }
 
+#include "hal/touch_sensor_ll.h"
+
 void Core::boot() {
     // ESP_LOGE("", "boot %lu", micros());
 
@@ -157,6 +159,10 @@ void Core::boot() {
         // Recover Settings from Disk // TODO
         kSettings.mValid = true;
     }
+
+    // uint32_t mask;
+    // touch_ll_read_trigger_status_mask(&mask); 
+    // ESP_LOGE("", "mask %lu", mask);
 
     //Wake up reason affects how to proceed
     auto wakeup_reason = esp_sleep_get_wakeup_cause();

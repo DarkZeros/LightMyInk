@@ -19,7 +19,7 @@ static RTC_DATA_ATTR struct DisplayState {
   bool darkBorder : 1 {false};
   bool inverted : 1 {false};
   bool postInvert : 1 {false};
-  bool partial : 1 {false};
+  DisplayMode mode : 2 {DisplayMode::FULL};
 } kState;
 
 const SPISettings Display::_spi_settings{kOverdriveSPI ? 26'666'666 : 20'000'000, MSBFIRST, SPI_MODE0};
@@ -159,8 +159,8 @@ void Display::init() {
   _transfer(0b11);  //  0bYX adress mode (+1/-0), Default 0b11
 
   // Set initial refresh mode
-  kState.partial = true; // Set it to force the first call
-  _setRefreshMode(false);
+  kState.mode = NONE; // Set it to force the first call
+  _setRefreshMode(FULL);
 
   _endTransfer();
   kState.initialized = true;
@@ -183,26 +183,26 @@ void Display::_setRamArea(const Rect& rect){
   //_transfer(0); // No need to write this, default is 0
 }
 
-void Display::setRefreshMode(bool partial)
+void Display::setRefreshMode(DisplayMode mode)
 {
-  if (kState.partial == partial)
+  if (kState.mode == mode || mode == DisplayMode::NONE)
     return;
 
   _startTransfer();
-  _setRefreshMode(partial);
+  _setRefreshMode(mode);
   _endTransfer();
 }
 
-void Display::_setRefreshMode(bool partial)
+void Display::_setRefreshMode(DisplayMode mode)
 {
-  if (kState.partial == partial)
+  if (kState.mode == mode || mode == DisplayMode::NONE)
     return;
 
   //1xxxxxx1 // Enable Disable clock
   //x1xxxx1x // Enable disable analog
   //xx1xxxxx // Load temp
   //xxx1xxxx // Load LUT
-  //xxxx1xxx // Display mode 2
+  //xxxx1xxx // Display mode 2 (fast)
   //xxxxx1xx // Display! 
 
   constexpr auto kTurnOnLoadLutDisplay = 0b11000100 | (kCustomLut ? 0x0 : 0b10000);
@@ -213,16 +213,16 @@ void Display::_setRefreshMode(bool partial)
   if (!kFastUpdateTemp) {
     updateCommand |= kLoadTemp;
   }
-  if (partial) {
+  if (mode == DisplayMode::FAST) {
     updateCommand |= kPartialMode;
   }
 
   _transferCommand(0x22);
   _transfer(updateCommand);
-  kState.partial = partial;
+  kState.mode = mode;
 }
 
-void Display::refresh(bool partial)
+void Display::refresh(DisplayMode partial)
 {
   _startTransfer();
   _setRefreshMode(partial);
@@ -364,13 +364,13 @@ void Display::writeRect(Rect rect)
   writeAlignedRect(rect);
 }
 
-void Display::writeAllAndRefresh(bool partial)
+void Display::writeAllAndRefresh(DisplayMode partial)
 {
   if (!kState.backBufferValid) {
     writeAll(true);
   }
   writeAll();
-  refresh(kState.backBufferValid ? partial : false);
+  refresh(kState.backBufferValid ? partial : FULL);
   kState.backBufferValid = true;
 }
 

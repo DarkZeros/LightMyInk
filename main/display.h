@@ -17,6 +17,13 @@
 
 #include "lut.h"
 
+enum DisplayMode {
+  NONE,
+  FULL,
+  FAST,
+  CUSTOM,
+};
+
 struct DisplaySettings {
   // Settings that can be changed
   bool mInvert : 1 {false};
@@ -69,20 +76,20 @@ public:
   void setDarkBorder(bool darkBorder);
   void setInverted(bool inverted);
 
-  void setRefreshMode(bool partial); // To leave the mode in a known state
-  void refresh(bool partial = true);
+  void setRefreshMode(DisplayMode mode);
+  void refresh(DisplayMode mode = NONE);
   void hibernate();
   void waitWhileBusy();
   void writeRect(Rect rect);
   void writeAlignedRect(const Rect& rect);
   void writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect);
   void writeAll(bool backBuffer = false);
-  void writeAllAndRefresh(bool partial = true);
+  void writeAllAndRefresh(DisplayMode mode = NONE);
 
 private:
   // Called internally in middle of transfer
   void _setRamArea(const Rect& rect);
-  void _setRefreshMode(bool partial);
+  void _setRefreshMode(DisplayMode mode);
 
   // SPI transfer methods
   void _startTransfer();
