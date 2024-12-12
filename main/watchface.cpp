@@ -10,6 +10,8 @@ void Watchface::updateCache() {
   auto fillCache = [&](Rect& r, uint8_t* data, bool units, size_t len){
     // Render all the cache elements, the spacing of elements is given by the Rect
     r = units ? rectU() : rectD();
+    // Clear the area!
+    // mDisplay.fillRect(r.x, r.y, r.w, r.h, 0);
     mDisplay.alignRect(r);
     auto size = r.size();
     for (auto d=0; d<len; d++) {

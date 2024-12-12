@@ -1,6 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  #espressif/fmt: ">=10.1.0" # Found issues with it, better use printf fttb
+  espressif/fmt: "^11.0.1"
   ## Required IDF version
   idf:
     version: ">=5.1.0"

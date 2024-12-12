@@ -26,7 +26,7 @@ void Touch::setUp(bool onlyMenuLight) {
   touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Light]], mSettings.mThreshold);
   if (!onlyMenuLight) {
     touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Down]], mSettings.mThreshold);
-    touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Up]], mSettings.mThreshold);
+    touch_pad_config((touch_pad_t)HW::Touch::Num[mSettings.mMap[Touch::Up]], mSettings.mThreshold - 10);
   }
   // Touch Sensor Timer initiated
   touch_pad_set_fsm_mode(TOUCH_FSM_MODE_TIMER);   // returns ESP_OK
