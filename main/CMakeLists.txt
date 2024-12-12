@@ -38,8 +38,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 idf_component_register(SRCS ${srcs} INCLUDE_DIRS ${includedirs} REQUIRES ${requires} PRIV_REQUIRES ${privrequires})
 
-#set_property(TARGET ${COMPONENT_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-#set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 target_compile_options(${COMPONENT_TARGET} PUBLIC
-    #-flto
+    -flto
+)
+target_link_options(${COMPONENT_TARGET} PUBLIC
+    -flto
 )
