@@ -6,8 +6,8 @@
 #include <optional>
 
 // constexpr static uint32_t kDefaultCalibration{16'000'000};
-// -125ppm, based on tests, better starting point
-constexpr static uint32_t kDefaultCalibration{15'998'000};
+// -134ppm, based on tests, better starting point
+constexpr static uint32_t kDefaultCalibration{15'997'850};
 
 struct TimeSync {
     timeval mTime;
