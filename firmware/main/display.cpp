@@ -481,13 +481,24 @@ void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
       y = HEIGHT - y - 1;
       break;
   }
-  auto& ptr = buffer[(x >> 3) + y * WB_BITMAP];
-  auto mask = 1 << (7 - (x & 7));
+
+  const int index = (x >> 3) + y * WB_BITMAP;
+  const auto mask = 1 << (7 - (x & 7));
+  auto& ptr = buffer[index];
+  uint8_t oldVal = ptr;
+
   if (color)
     ptr |= mask;
   else
     ptr &= ~mask;
   // ptr = (ptr & ~mask) | (-(color != 0) & mask); // Alternative
+
+  if constexpr (kTrackChanges) {
+    if (changes && ptr != oldVal)
+    {
+      changes->set(index);
+    }
+  }
 }
 
 /**************************************************************************/
