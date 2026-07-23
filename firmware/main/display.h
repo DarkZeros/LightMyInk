@@ -10,6 +10,7 @@
 #pragma once
 
 #include <Adafruit_GFX.h>
+#include <bitset>
 
 #include "hardware.h"
 
@@ -45,12 +46,14 @@ public:
   static constexpr bool kFastUpdateTemp = true; // Saves 5ms + FixedSpeedier LUT (300ms update)
   static constexpr bool kOverdriveSPI = false; // Uses a 25% faster SPI out of spec
   static constexpr bool kArduinoSPI = false; // Use the arduino SPI or the uSPI
+  static constexpr bool kTrackChanges = true; // Track the changes in display using bitset
 
   static constexpr uint8_t WIDTH = 200;
   static constexpr uint8_t HEIGHT = WIDTH;
   static constexpr uint8_t WB_BITMAP = (WIDTH + 7) / 8;
 
   uint8_t buffer[WB_BITMAP * HEIGHT];
+  std::optional<std::bitset<kTrackChanges * (WB_BITMAP * HEIGHT + 7) / 8>> changes;
 
   Display();
 
