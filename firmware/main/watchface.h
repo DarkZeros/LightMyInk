@@ -6,6 +6,8 @@
 #include <TimeLib.h>
 #include "ui.h"
 
+static constexpr auto kMaxWatchfaceStorage = 320u;
+
 struct WatchfaceSettings {
     uint8_t mType : 2 {0}; // Watchface type selected from the presets
     bool mDebug {false};
@@ -20,11 +22,11 @@ struct WatchfaceSettings {
 
         struct Units {
             Rect coord {}; 
-            uint8_t data[270 * 10]{}; // 2700 B = 30%
+            uint8_t data[kMaxWatchfaceStorage * 10]{}; // 2700 B = 30%
         } mUnits;
         struct Decimal {
             Rect coord {};
-            uint8_t data[270 * 6]{}; // 1620 B = 20%
+            uint8_t data[kMaxWatchfaceStorage * 6]{}; // 1620 B = 20%
         } mDecimal;
     } mCache;
 

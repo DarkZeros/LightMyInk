@@ -16,6 +16,9 @@ void Watchface::updateCache() {
     // mDisplay.fillRect(r.x, r.y, r.w, r.h, 0);
     mDisplay.alignRect(r);
     auto size = r.size();
+    if (size > kMaxWatchfaceStorage) {
+      ESP_LOGE("Watchface", "outofbounds cache %d > %d", size, kMaxWatchfaceStorage);
+    }
     for (auto d=0; d<len; d++) {
       units ? drawU(d) : drawD(d);
       // Copy the area to the cache
