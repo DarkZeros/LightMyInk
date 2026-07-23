@@ -29,7 +29,7 @@ struct DisplaySettings {
   bool mDarkBorder {false};
   uint8_t mRotation {2};
   DisplayMode mMenuLut {FAST};
-  DisplayMode mWatchLut {QUICK};
+  DisplayMode mWatchLut {FAST};
 };
 
 extern int getSetDisplayMode();
