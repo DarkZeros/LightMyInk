@@ -385,15 +385,19 @@ void Display::alignRect(Rect& rect) const
   rotate(rect);
   auto& [x, y, w, h] = rect;
 
+  // Align x down, and w up
+  w = (w + (x & 7) + 7) & ~7;
+  x = x & ~7;
+
   // Align
-  x = x & ~7; // byte boundary
-  w = WIDTH - x < w ? WIDTH - x : w; // limit
-  h = HEIGHT - y < h ? HEIGHT - y : h; // limit
+  // x = x & ~7; // byte boundary
+  // w = WIDTH - x < w ? WIDTH - x : w; // limit
+  // h = HEIGHT - y < h ? HEIGHT - y : h; // limit
 
-  w = (w + 7) & ~7; // byte boundary, bitmaps are padded
+  // w = (w + 7) & ~7; // byte boundary, bitmaps are padded
 
-  w = x + w < WIDTH ? w : WIDTH - x; // limit
-  h = y + h < HEIGHT ? h : HEIGHT - y; // limit
+  // w = x + w < WIDTH ? w : WIDTH - x; // limit
+  // h = y + h < HEIGHT ? h : HEIGHT - y; // limit
 }
 
 void Display::writeAlignedRect(const Rect& rect)
