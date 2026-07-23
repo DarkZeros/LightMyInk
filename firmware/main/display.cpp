@@ -279,7 +279,12 @@ void Display::refresh()
   if (!kState.firstRefreshDone) {
     // Draw the backbuffer as well on first refresh
     writeAll(true);
+    writeAll(false);
+    changes.emplace();
+  } else {
+    writeDelta();
   }
+
   {
     auto powerLock = Power::Lock(Power::Flag::Display);
     _startTransfer();
@@ -288,6 +293,11 @@ void Display::refresh()
 
     waitWhileBusy();
   }
+  {
+    writeDelta(true);
+    changes->reset();
+  }
+
   if (!kState.firstRefreshDone) {
     _startTransfer();
     _setRefreshMode(kState.mode);
@@ -428,22 +438,51 @@ void Display::writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect)
 
 void Display::writeRect(Rect rect)
 {
+  ESP_LOGE("Disp", "WriteRect (%d,%d)", rect.w, rect.h);
   alignRect(rect);
   writeAlignedRect(rect);
 }
 
 void Display::writeAllAndRefresh()
 {
-  writeAll();
+  // writeAll();
   refresh();
  }
 
 void Display::writeAll(bool backbuffer)
 {
+  ESP_LOGE("Disp", "WriteAll");
   _startTransfer();
   _setRamArea({0, 0, WIDTH, HEIGHT});
   _transferCommand(backbuffer ? 0x26 : 0x24);
   _transfer(buffer, sizeof(buffer));
+  _endTransfer();
+}
+
+void Display::writeDelta(bool backbuffer)
+{
+  _startTransfer();
+  _setRamArea({0, 0, WIDTH, HEIGHT});
+  _transferCommand(backbuffer ? 0x26 : 0x24);
+  bool contiguous = true;
+  int c = 0;
+  for (auto i=0; i<changes->size(); i++) {
+    if (changes->test(i)) {
+      c++;
+      if (!contiguous) {
+        _transferCommand(0x4e); // X start counter
+        _transfer(i % WB_BITMAP);
+        _transferCommand(0x4f); // Y start counter
+        _transfer(i / WB_BITMAP);
+        _transferCommand(backbuffer ? 0x26 : 0x24);
+        contiguous = true;
+      }
+      _transfer(buffer[i]); // PERF TODO: Consider using async trasnfer
+    } else {
+      contiguous = false;
+    }
+  }
+  ESP_LOGE("Disp", "writeDelta %d, %d", c, changes->size());
   _endTransfer();
 }
 
@@ -485,8 +524,8 @@ void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
   }
 
   const int index = (x >> 3) + y * WB_BITMAP;
-  const auto mask = 1 << (7 - (x & 7));
-  auto& ptr = buffer[index];
+  const uint8_t mask = 1 << (7 - (x & 7));
+  uint8_t& ptr = buffer[index];
   uint8_t oldVal = ptr;
 
   if (color)
@@ -496,7 +535,7 @@ void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
   // ptr = (ptr & ~mask) | (-(color != 0) & mask); // Alternative
 
   if constexpr (kTrackChanges) {
-    if (changes && ptr != oldVal)
+    if (changes.has_value() && ptr != oldVal)
     {
       changes->set(index);
     }

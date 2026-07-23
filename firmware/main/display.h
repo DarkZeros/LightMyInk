@@ -53,7 +53,7 @@ public:
   static constexpr uint8_t WB_BITMAP = (WIDTH + 7) / 8;
 
   static uint8_t buffer[WB_BITMAP * HEIGHT];
-  std::optional<std::bitset<kTrackChanges * (WB_BITMAP * HEIGHT + 7) / 8>> changes;
+  std::optional<std::bitset<kTrackChanges * WB_BITMAP * HEIGHT + 7>> changes;
 
   Display();
 
@@ -87,6 +87,7 @@ public:
   void writeAlignedRect(const Rect& rect);
   void writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect);
   void writeAll(bool backBuffer = false);
+  void writeDelta(bool backBuffer = false);
   void writeAllAndRefresh();
 
   // Aditional helper draw
