@@ -52,7 +52,7 @@ public:
   static constexpr uint8_t HEIGHT = WIDTH;
   static constexpr uint8_t WB_BITMAP = (WIDTH + 7) / 8;
 
-  uint8_t buffer[WB_BITMAP * HEIGHT];
+  static uint8_t buffer[WB_BITMAP * HEIGHT];
   std::optional<std::bitset<kTrackChanges * (WB_BITMAP * HEIGHT + 7) / 8>> changes;
 
   Display();
