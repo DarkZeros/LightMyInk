@@ -61,6 +61,23 @@ void Signal::FixedWidthPWM::send() const {
     delayMicroseconds(mDelayRepetitions);
   }
 }
+void Signal::KeeLoq::send() const {
+  // auto ook = OOK(mBitMicros, mFrequency, -9, 22); // Custom power transmission
+  auto ook = OOK(mBitMicros, mFrequency);
+  // Construct the sequence to send
+  std::vector<bool> seq;
+  seq.reserve(std::max(mPattern0.size(), mPattern1.size()));
+  // for(auto bit : mSequence) {
+  //   auto& pat = bit ? mPattern1 : mPattern0;
+  //   for (auto b : pat)
+  //     seq.emplace_back(b);
+  // }
+  for(auto i=0; i<mRepetitions; i++) {
+    ook.transmit(seq);
+    // TODO continuation bit
+    delayMicroseconds(mDelayRepetitions);
+  }
+}
 
 int16_t OOK::setOutputPowerFast(int8_t power) {
   if (auto state = kRadio->checkOutputPower(power, NULL))

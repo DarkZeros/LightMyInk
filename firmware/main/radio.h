@@ -27,7 +27,19 @@ namespace Signal {
     const uint32_t mDelayRepetitions = 0;
     void send() const;
   };
-  using Sequence = std::variant<BasicOOK, FixedWidthPWM>;
+  struct KeeLoq {
+    const float mFrequency;
+    const uint32_t mBitMicros;
+    const uint32_t mSerial : 28;
+    // COUNTER
+    const std::vector<bool> mPattern0 = {1,0,0}, mPattern1 = {1,1,0};
+    const uint8_t mRepetitions = 1;
+    const bool mLowBat = true;
+    const bool mContinueBit = true;
+    const uint32_t mDelayRepetitions = 14'000;
+    void send() const;
+  };
+  using Sequence = std::variant<BasicOOK, FixedWidthPWM, KeeLoq>;
   struct Group {
     std::string mName;
     std::vector<std::pair<std::string, Sequence>> mSequences;
