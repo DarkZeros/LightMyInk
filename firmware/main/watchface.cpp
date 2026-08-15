@@ -25,7 +25,7 @@ void Watchface::updateCache() {
       for(auto y=0; y<r.h; y++) {
         memcpy(
           data + size * d + y * r.w / 8,
-          mDisplay.buffer + r.x/8 + (y + r.y) * mDisplay.WB_BITMAP,
+          mDisplay.data(r.x/8 + (y + r.y) * mDisplay.WB_BITMAP),
           r.w / 8);
       }
       // Clear the area! // TODO optimize
@@ -57,10 +57,10 @@ void Watchface::draw() {
   };
   auto copyCache2Buffer = [&](auto&& ptr, const Rect& r) {
     for (auto y=0; y<r.h; y++)
-      memcpy(
-        mDisplay.buffer + r.x / 8 + (r.y + y) * mDisplay.WB_BITMAP,
+      mDisplay.copyBytes(
+        r.x / 8 + (r.y + y) * mDisplay.WB_BITMAP,
         ptr + y * r.w / 8,
-        r.w / 8 
+        r.w / 8
       );
   };
 

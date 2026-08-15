@@ -9,6 +9,8 @@
 
 #include "display.h"
 #include "power.h"
+
+#include <cstring>
 #include "hardware.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
@@ -27,7 +29,24 @@ static RTC_DATA_ATTR struct DisplayState {
   DisplayMode mode {DisplayMode::FULL};
 } kState;
 
-RTC_FAST_ATTR uint8_t Display::buffer[WB_BITMAP * HEIGHT] = {};
+// The framebuffer mirrors the controller front RAM (0x24) and survives deep
+// sleep, so a wake only has to push what it actually changed.
+RTC_FAST_ATTR uint8_t Display::buffer[Display::kBufferSize] = {};
+// One bit per framebuffer byte. Lives next to the buffer in RTC so a wake that
+// draws but sleeps before refreshing does not lose track of what it dirtied.
+RTC_FAST_ATTR std::bitset<Display::kChangesBits> Display::changes = {};
+
+namespace {
+  // WriteThrough only: bounding span (buffer indices) of everything written
+  // since the last refresh, used to resync the back RAM afterwards.
+  RTC_FAST_ATTR size_t kSpanLo {Display::kBufferSize};
+  RTC_FAST_ATTR size_t kSpanHi {0};
+
+  // Transient, per boot: is a write-through SPI transaction open, and which
+  // buffer index is the controller address counter sitting at.
+  bool sWtOpen {false};
+  size_t sWtNext {Display::kBufferSize};
+}
 
 int RTC_IRAM_ATTR getSetDisplayMode() { return kState.mode; };
 
@@ -213,6 +232,128 @@ void Display::_setRamArea(const Rect& rect){
   //_transfer(0); // No need to write this, default is 0
 }
 
+// Point the RAM address counter at a framebuffer index. Assumes the RAM area
+// spans the full width, so the counter wraps to the next line on its own.
+void Display::_setRamPos(size_t index)
+{
+  _transferCommand(0x4e); // X start counter
+  _transfer(index % WB_BITMAP);
+  _transferCommand(0x4f); // Y start counter
+  _transfer(index / WB_BITMAP);
+}
+
+// ---- Framebuffer access ---------------------------------------------------
+
+void Display::setByte(size_t index, uint8_t value)
+{
+  if constexpr (kTrack == Track::None) {
+    buffer[index] = value;
+    return;
+  }
+
+  // Only a real change is worth tracking: this is what makes a redraw of
+  // identical content free, and it is why clear-then-redraw still ends up
+  // cheap as long as it goes through the accessors.
+  if (buffer[index] == value)
+    return;
+  buffer[index] = value;
+
+  if constexpr (kTrack == Track::Deltas) {
+    changes.set(index);
+  } else {
+    _writeThrough(index, value);
+  }
+}
+
+void Display::fillBytes(size_t index, uint8_t value, size_t count)
+{
+  if constexpr (kTrack == Track::None) {
+    memset(buffer + index, value, count);
+    return;
+  }
+  for (size_t i = 0; i < count; i++)
+    setByte(index + i, value);
+}
+
+void Display::copyBytes(size_t index, const uint8_t* src, size_t count)
+{
+  if constexpr (kTrack == Track::None) {
+    memcpy(buffer + index, src, count);
+    return;
+  }
+  for (size_t i = 0; i < count; i++)
+    setByte(index + i, src[i]);
+}
+
+void Display::copyBytesSynced(size_t index, const uint8_t* src, size_t count)
+{
+  memcpy(buffer + index, src, count);
+  markSynced(index, count);
+}
+
+void Display::markDirty(size_t index, size_t count)
+{
+  if constexpr (kTrack == Track::Deltas)
+    for (size_t i = 0; i < count; i++)
+      changes.set(index + i);
+}
+
+void Display::markSynced(size_t index, size_t count)
+{
+  if constexpr (kTrack == Track::Deltas)
+    for (size_t i = 0; i < count; i++)
+      changes.reset(index + i);
+}
+
+// ---- WriteThrough ---------------------------------------------------------
+
+void Display::_writeThrough(size_t index, uint8_t value)
+{
+  if (!sWtOpen) {
+    _startTransfer();
+    _setRamArea({0, 0, WIDTH, HEIGHT});
+    sWtOpen = true;
+    sWtNext = kBufferSize; // Force a reposition for the first byte
+  }
+  if (index != sWtNext) {
+    _setRamPos(index);
+    _transferCommand(0x24);
+  }
+  _transfer(value);
+  sWtNext = index + 1;
+
+  if (index < kSpanLo) kSpanLo = index;
+  if (index >= kSpanHi) kSpanHi = index + 1;
+}
+
+// Any other transfer would move the address counter under us, so the streaming
+// transaction has to be closed before it runs. Also keeps CS from being held
+// low across code that may want the shared SPI bus (Radio).
+void Display::_flushWriteThrough()
+{
+  if constexpr (kTrack != Track::WriteThrough)
+    return;
+  if (!sWtOpen)
+    return;
+  _endTransfer();
+  sWtOpen = false;
+  sWtNext = kBufferSize;
+}
+
+// WriteThrough has no per-byte record left by the time we refresh, so the back
+// RAM is resynced from the bounding span of everything written this round.
+void Display::_writeDirtySpan(bool backbuffer)
+{
+  if (kSpanLo >= kSpanHi)
+    return;
+  _startTransfer();
+  _setRamArea({0, 0, WIDTH, HEIGHT});
+  _setRamPos(kSpanLo);
+  _transferCommand(backbuffer ? 0x26 : 0x24);
+  _transfer(buffer + kSpanLo, kSpanHi - kSpanLo);
+  _endTransfer();
+}
+
 void Display::setRefreshMode(DisplayMode mode)
 {
   if (kState.mode == mode)
@@ -223,6 +364,7 @@ void Display::setRefreshMode(DisplayMode mode)
   if (!kState.firstRefreshDone)
     return;
 
+  _flushWriteThrough();
   _startTransfer();
   _setRefreshMode(mode);
   _endTransfer();
@@ -276,14 +418,19 @@ void Display::_setRefreshMode(const DisplayMode& mode)
 
 void Display::refresh()
 {
+  _flushWriteThrough();
+
+  // Push the new image into the front RAM (0x24)
   if (!kState.firstRefreshDone) {
-    // Draw the backbuffer as well on first refresh
+    // Nothing known to be on the panel yet: seed both RAMs with the whole
+    // framebuffer so the front/back pair starts out consistent.
     writeAll(true);
     writeAll(false);
-    changes.emplace();
-  } else {
-    writeDelta();
-  }
+  } else if constexpr (kTrack == Track::None) {
+    writeAll(false);
+  } else if constexpr (kTrack == Track::Deltas) {
+    writeChanges(false);
+  } // WriteThrough already streamed every changed byte as it was written
 
   {
     auto powerLock = Power::Lock(Power::Flag::Display);
@@ -293,10 +440,22 @@ void Display::refresh()
 
     waitWhileBusy();
   }
-  {
-    writeDelta(true);
-    changes->reset();
+
+  // The panel now shows `buffer`. Bring the back RAM (0x26) in line with it: a
+  // partial update computes its transitions from old (0x26) to new (0x24), so
+  // they have to match before the next round. The first refresh already wrote
+  // both.
+  if (kState.firstRefreshDone) {
+    if constexpr (kTrack == Track::None)
+      writeAll(true);
+    else if constexpr (kTrack == Track::Deltas)
+      writeChanges(true);
+    else
+      _writeDirtySpan(true);
   }
+  changes.reset();
+  kSpanLo = kBufferSize;
+  kSpanHi = 0;
 
   if (!kState.firstRefreshDone) {
     _startTransfer();
@@ -348,6 +507,7 @@ void Display::waitWhileBusy() {
 void Display::setDarkBorder(bool dark) {
   if (kState.darkBorder == dark)
     return;
+  _flushWriteThrough();
   _startTransfer();
   _transferCommand(0x3C); // BorderWavefrom
   _transfer(dark ? 0x02 : 0x05);
@@ -359,6 +519,7 @@ void Display::setInverted(bool inverted) {
   if (kState.inverted == inverted)
     return;
   kState.inverted = inverted;
+  _flushWriteThrough();
   _startTransfer();
   _transferCommand(0x21); // RAM for Display Update
   if (kState.firstRefreshDone) {
@@ -412,8 +573,12 @@ void Display::alignRect(Rect& rect) const
   // h = y + h < HEIGHT ? h : HEIGHT - y; // limit
 }
 
+// Manual escape hatch: pushes a rect of the framebuffer to the front RAM. It
+// deliberately leaves the change tracking alone, the bytes still have to reach
+// the back RAM on the next refresh().
 void Display::writeAlignedRect(const Rect& rect)
 {
+  _flushWriteThrough();
   _startTransfer();
   _setRamArea(rect);
   _transferCommand(0x24);
@@ -428,66 +593,68 @@ void Display::writeAlignedRect(const Rect& rect)
 
 void Display::writeAlignedRectPacked(const uint8_t* ptr, const Rect& rect)
 {
+  _flushWriteThrough();
   _startTransfer();
   _setRamArea(rect);
   // ESP_LOGE("area","%p, %d %d %d %d, size %d", ptr, x, y, w, h, ((uint16_t)h) * w / 8);
   _transferCommand(0x24);
   _transfer(ptr, ((uint16_t)rect.h * rect.w) >> 3);
   _endTransfer();
+
+  // The controller now holds bytes we never drew: mirror them so `buffer` keeps
+  // matching the front RAM, otherwise every later delta is computed against a
+  // stale image.
+  const auto stride = rect.w >> 3;
+  for (auto i = 0; i < rect.h; i++)
+    copyBytesSynced((rect.x >> 3) + (rect.y + i) * WB_BITMAP, ptr + i * stride, stride);
 }
 
 void Display::writeRect(Rect rect)
 {
-  ESP_LOGE("Disp", "WriteRect (%d,%d)", rect.w, rect.h);
   alignRect(rect);
   writeAlignedRect(rect);
 }
 
-void Display::writeAllAndRefresh()
-{
-  // writeAll();
-  refresh();
- }
-
 void Display::writeAll(bool backbuffer)
 {
-  ESP_LOGE("Disp", "WriteAll");
+  _flushWriteThrough();
   _startTransfer();
   _setRamArea({0, 0, WIDTH, HEIGHT});
   _transferCommand(backbuffer ? 0x26 : 0x24);
-  _transfer(buffer, sizeof(buffer));
+  _transfer(buffer, kBufferSize);
   _endTransfer();
 }
 
-void Display::writeDelta(bool backbuffer)
+// Push only the dirty bytes, coalesced into runs so each run costs one address
+// set plus a single block transfer.
+void Display::writeChanges(bool backbuffer)
 {
+  if constexpr (kTrack != Track::Deltas)
+    return;
+
+  const uint8_t cmd = backbuffer ? 0x26 : 0x24;
   _startTransfer();
   _setRamArea({0, 0, WIDTH, HEIGHT});
-  _transferCommand(backbuffer ? 0x26 : 0x24);
-  bool contiguous = true;
-  int c = 0;
-  for (auto i=0; i<changes->size(); i++) {
-    if (changes->test(i)) {
-      c++;
-      if (!contiguous) {
-        _transferCommand(0x4e); // X start counter
-        _transfer(i % WB_BITMAP);
-        _transferCommand(0x4f); // Y start counter
-        _transfer(i / WB_BITMAP);
-        _transferCommand(backbuffer ? 0x26 : 0x24);
-        contiguous = true;
-      }
-      _transfer(buffer[i]); // PERF TODO: Consider using async trasnfer
-    } else {
-      contiguous = false;
+  for (size_t i = 0; i < kBufferSize; ) {
+    if (!changes.test(i)) {
+      i++;
+      continue;
     }
+    size_t end = i + 1;
+    while (end < kBufferSize && changes.test(end))
+      end++;
+
+    _setRamPos(i);
+    _transferCommand(cmd);
+    _transfer(buffer + i, end - i);
+    i = end;
   }
-  ESP_LOGE("Disp", "writeDelta %d, %d", c, changes->size());
   _endTransfer();
 }
 
 void Display::hibernate()
 {
+  _flushWriteThrough();
   _startTransfer();
   _transferCommand(0x10); // change deep sleep mode
   _transfer(0b01);  // mode 1 (RAM reading allowed)
@@ -523,23 +690,46 @@ void Display::drawPixel(int16_t x, int16_t y, uint16_t color)
       break;
   }
 
-  const int index = (x >> 3) + y * WB_BITMAP;
+  const size_t index = (x >> 3) + y * WB_BITMAP;
   const uint8_t mask = 1 << (7 - (x & 7));
-  uint8_t& ptr = buffer[index];
-  uint8_t oldVal = ptr;
 
   if (color)
-    ptr |= mask;
+    orByte(index, mask);
   else
-    ptr &= ~mask;
-  // ptr = (ptr & ~mask) | (-(color != 0) & mask); // Alternative
+    andByte(index, ~mask);
+}
 
-  if constexpr (kTrackChanges) {
-    if (changes.has_value() && ptr != oldVal)
-    {
-      changes->set(index);
-    }
-  }
+void Display::fillScreen(uint16_t color)
+{
+  fillBytes(0, color ? 0xFF : 0x00, kBufferSize);
+}
+
+// GFX brackets composite draws with startWrite/endWrite, which is exactly the
+// window where WriteThrough can hold a single SPI transaction open.
+void Display::startWrite() {}
+void Display::endWrite() { _flushWriteThrough(); }
+
+// GFX would otherwise fill a rect column by column through drawFastVLine, one
+// read-modify-write per pixel. Rotating the rect once and filling raw spans
+// keeps whole bytes going through the memset path in drawFastRawHLine.
+void Display::fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+{
+  if (w < 0) { x += w + 1; w = -w; }
+  if (h < 0) { y += h + 1; h = -h; }
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x + w > width())  w = width()  - x;
+  if (y + h > height()) h = height() - y;
+  if (w <= 0 || h <= 0)
+    return;
+
+  // A rect stays a rect under rotation, so rotate once instead of per pixel
+  Rect r{static_cast<uint8_t>(x), static_cast<uint8_t>(y),
+         static_cast<uint8_t>(w), static_cast<uint8_t>(h)};
+  rotate(r);
+
+  for (uint8_t row = 0; row < r.h; row++)
+    drawFastRawHLine(r.x, r.y + row, r.w, color);
 }
 
 /**************************************************************************/
@@ -665,20 +855,15 @@ void Display::drawFastHLine(int16_t x, int16_t y, int16_t w,
 void Display::drawFastRawVLine(int16_t x, int16_t y, int16_t h,
                                   uint16_t color) {
   // x & y already in raw (rotation 0) coordinates, no need to transform.
-  uint8_t *ptr = &buffer[(x >> 3) + y * WB_BITMAP];
+  size_t index = (x >> 3) + y * WB_BITMAP;
+  const uint8_t bit_mask = (0x80 >> (x & 7));
 
   if (color > 0) {
-    uint8_t bit_mask = (0x80 >> (x & 7));
-    for (int16_t i = 0; i < h; i++) {
-      *ptr |= bit_mask;
-      ptr += WB_BITMAP;
-    }
+    for (int16_t i = 0; i < h; i++, index += WB_BITMAP)
+      orByte(index, bit_mask);
   } else {
-    uint8_t bit_mask = ~(0x80 >> (x & 7));
-    for (int16_t i = 0; i < h; i++) {
-      *ptr &= bit_mask;
-      ptr += WB_BITMAP;
-    }
+    for (int16_t i = 0; i < h; i++, index += WB_BITMAP)
+      andByte(index, ~bit_mask);
   }
 }
 
@@ -694,7 +879,7 @@ void Display::drawFastRawVLine(int16_t x, int16_t y, int16_t h,
 void Display::drawFastRawHLine(int16_t x, int16_t y, int16_t w,
                                   uint16_t color) {
   // x & y already in raw (rotation 0) coordinates, no need to transform.
-  uint8_t *ptr = &buffer[(x >> 3) + y * WB_BITMAP];
+  size_t index = (x >> 3) + y * WB_BITMAP;
   size_t remainingWidthBits = w;
 
   // check to see if first byte needs to be partially filled
@@ -706,12 +891,12 @@ void Display::drawFastRawHLine(int16_t x, int16_t y, int16_t w,
       remainingWidthBits--;
     }
     if (color > 0) {
-      *ptr |= startByteBitMask;
+      orByte(index, startByteBitMask);
     } else {
-      *ptr &= ~startByteBitMask;
+      andByte(index, ~startByteBitMask);
     }
 
-    ptr++;
+    index++;
   }
 
   // do the next remainingWidthBits bits
@@ -720,19 +905,19 @@ void Display::drawFastRawHLine(int16_t x, int16_t y, int16_t w,
     size_t lastByteBits = remainingWidthBits & 7;
     uint8_t wholeByteColor = color > 0 ? 0xFF : 0x00;
 
-    memset(ptr, wholeByteColor, remainingWholeBytes);
+    fillBytes(index, wholeByteColor, remainingWholeBytes);
 
     if (lastByteBits > 0) {
       uint8_t lastByteBitMask = 0x00;
       for (size_t i = 0; i < lastByteBits; i++) {
         lastByteBitMask |= (0x80 >> i);
       }
-      ptr += remainingWholeBytes;
+      index += remainingWholeBytes;
 
       if (color > 0) {
-        *ptr |= lastByteBitMask;
+        orByte(index, lastByteBitMask);
       } else {
-        *ptr &= ~lastByteBitMask;
+        andByte(index, ~lastByteBitMask);
       }
     }
   }
